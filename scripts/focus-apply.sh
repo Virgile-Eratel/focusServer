@@ -3,11 +3,7 @@ set -euo pipefail
 
 #
 # focus-apply.sh
-# Applique l'état "blocked" / "unblocked" :
-#  - gère /etc/hosts
-#  - gère /etc/pf.user.conf via template
-#  - recharge PF proprement
-#  - flush DNS
+# Applique l'état "blocked" / "unblocked"
 #
 
 LOG="/var/log/focus-apply.log"
@@ -21,6 +17,7 @@ TARGET="/etc/hosts"
 PF_TEMPLATE="/usr/local/etc/pf.user.conf.template"
 PF_USER_CONF="/etc/pf.user.conf"
 PF_CONF="/etc/pf.conf"
+ANCHOR_NAME="user-block"
 
 log() {
   local now
@@ -40,6 +37,7 @@ if [[ "$MODE" != "blocked" && "$MODE" != "unblocked" ]]; then
 fi
 
 # ===== APPLY HOSTS =====
+# Note : Ceci écrase /etc/hosts. Assurez-vous que les fichiers sources contiennent localhost.
 if [[ "$MODE" = "blocked" ]]; then
   log "Applying BLOCKED hosts"
   cp "$BLOCKED" "$TARGET"
@@ -55,27 +53,36 @@ if [[ "$MODE" = "blocked" ]]; then
   cp "$PF_TEMPLATE" "$PF_USER_CONF"
 else
   log "Clearing PF rules (mode unblocked)"
+  # On laisse le fichier mais on le vide (ou juste un commentaire)
   echo "# empty pf.user.conf (unblocked mode)" > "$PF_USER_CONF"
 fi
 
 # ===== RELOAD PF =====
-log "Reloading PF (/etc/pf.conf)"
+log "Configuring PF..."
 
-# syntax check
-if ! pfctl -nf "$PF_CONF" 2>/dev/null; then
-  log "ERROR: pf.conf syntax invalid"
-  exit 1
+# 1. S'assurer que PF est activé (-E : Enable if not already enabled)
+# On ignore l'erreur si c'est déjà activé ou impossible (pour ne pas crash le script)
+pfctl -E 2>/dev/null || true
+
+# 2. Recharger l'anchor spécifique (Plus rapide et ne touche pas au reste du système)
+# Syntax check de l'anchor seule
+if pfctl -a "$ANCHOR_NAME" -nf "$PF_USER_CONF"; then
+    log "Reloading specific anchor: $ANCHOR_NAME"
+    pfctl -a "$ANCHOR_NAME" -f "$PF_USER_CONF" 2>/dev/null
+else
+    # Fallback : Si l'anchor n'est pas chargée, on recharge tout le fichier principal
+    log "Anchor reload failed or not loaded. Reloading full /etc/pf.conf"
+    pfctl -f "$PF_CONF" 2>/dev/null
 fi
 
-# apply
-pfctl -f "$PF_CONF" 2>/dev/null \
-  && log "PF reloaded successfully" \
-  || log "WARNING: PF reload returned an error"
-
 # ===== FLUSH DNS =====
-log "Flushing DNS"
+log "Flushing DNS caches"
 dscacheutil -flushcache 2>/dev/null || true
 killall -HUP mDNSResponder 2>/dev/null || true
+
+log "Killing active states..."
+pfctl -k 0.0.0.0/0 -k 0.0.0.0/0 2>/dev/null || true
+pfctl -k ::/0 -k ::/0 2>/dev/null || true
 
 log "focus-apply DONE (mode=$MODE)"
 exit 0
