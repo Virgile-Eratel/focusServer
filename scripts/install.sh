@@ -3,8 +3,10 @@ set -euo pipefail
 
 #
 # install.sh
-# Installe l'environnement focusServer sans activer le blocage.
-# Automatise les droits sudo pour le serveur.
+# 1. Installe les configs système (/etc/hosts, PF).
+# 2. Configure les droits sudo sans mot de passe.
+# 3. Compile le projet TypeScript.
+# 4. Configure le lancement automatique au démarrage (Launchd).
 #
 
 if [[ "$EUID" -ne 0 ]]; then
@@ -13,8 +15,10 @@ if [[ "$EUID" -ne 0 ]]; then
   exit 1
 fi
 
-# Récupérer l'utilisateur réel (celui qui a lancé sudo) pour les droits
+# Récupérer l'utilisateur réel (celui qui a lancé sudo)
 REAL_USER="${SUDO_USER:-$USER}"
+# Récupérer le dossier Home réel
+REAL_HOME=$(eval echo "~$REAL_USER")
 
 echo "🔧 Installation de focusServer pour l'utilisateur : $REAL_USER"
 
@@ -29,11 +33,9 @@ DEST_BIN_DIR="/usr/local/bin"
 # ==============================================================================
 # 1. Installation des fichiers de configuration
 # ==============================================================================
-echo "📂 Mise en place des fichiers config dans $DEST_CONFIG_DIR..."
+echo "📂 [1/6] Mise en place des fichiers config..."
 mkdir -p "$DEST_CONFIG_DIR"
 
-# On utilise 'install' pour copier ET mettre les droits
-# Mode 644 pour les fichiers texte
 install -m 644 "$SRC_CONFIG/hosts.blocked"       "$DEST_CONFIG_DIR/hosts.blocked"
 install -m 644 "$SRC_CONFIG/hosts.unblocked"     "$DEST_CONFIG_DIR/hosts.unblocked"
 install -m 644 "$SRC_CONFIG/pf.user.conf.template" "$DEST_CONFIG_DIR/pf.user.conf.template"
@@ -41,56 +43,136 @@ install -m 644 "$SRC_CONFIG/pf.user.conf.template" "$DEST_CONFIG_DIR/pf.user.con
 # ==============================================================================
 # 2. Installation du script de contrôle (Moteur)
 # ==============================================================================
-echo "⚙️  Installation du script moteur..."
-# Mode 755 (exécutable)
+echo "⚙️  [2/6] Installation du script moteur..."
 install -m 755 "$SRC_SCRIPTS/focus-apply.sh" "$DEST_BIN_DIR/focus-apply.sh"
 
 # ==============================================================================
 # 3. Configuration du Firewall macOS (PF)
 # ==============================================================================
+echo "🛡  [3/6] Configuration du Firewall..."
 PF_CONF="/etc/pf.conf"
 PF_ANCHOR_TEXT='anchor "user-block"'
 PF_LOAD_TEXT='load anchor "user-block" from "/etc/pf.user.conf"'
 
-# Backup de sécurité
 if [[ ! -f "$PF_CONF.backup-focus" ]]; then
     cp "$PF_CONF" "$PF_CONF.backup-focus"
 fi
 
-# Injection de l'anchor si absente
 if ! grep -q "$PF_ANCHOR_TEXT" "$PF_CONF"; then
-    echo "🔌 Raccordement au Firewall macOS (ajout anchor)..."
-    # On ajoute les lignes à la fin de pf.conf
     printf "\n# focusServer\n%s\n%s\n" "$PF_ANCHOR_TEXT" "$PF_LOAD_TEXT" >> "$PF_CONF"
-else
-    echo "✅ Firewall déjà configuré."
 fi
 
-# Initialisation en mode DÉBLOQUÉ (sécurité)
-# On crée un fichier pf.user.conf vide ou avec des règles passives pour commencer
-echo "🛡  Initialisation du firewall en mode passif..."
-# On vide le fichier cible pour être sûr de ne rien bloquer à l'install
+# Initialisation passive
 : > /etc/pf.user.conf 
-
-# Rechargement de la conf PF pour prendre en compte l'anchor
-pfctl -f "$PF_CONF" 2>/dev/null || echo "⚠️ Note: pfctl a émis un avertissement, normal si pf.user.conf est vide."
-pfctl -E 2>/dev/null || true # S'assure que PF est activé
+pfctl -f "$PF_CONF" 2>/dev/null || echo "⚠️  PF reload warning (normal)"
+pfctl -E 2>/dev/null || true
 
 # ==============================================================================
-# 4. Automatisation des droits Sudo (Le "Zéro Commande" magique)
+# 4. Automatisation des droits Sudo
 # ==============================================================================
-echo "🔑 Configuration des droits sudo automatiques..."
-
+echo "🔑 [4/6] Configuration des droits sudo..."
 SUDOERS_FILE="/etc/sudoers.d/focus-server"
-
-# On écrit la règle qui autorise l'utilisateur à lancer focus-apply.sh sans mot de passe
 echo "$REAL_USER ALL=(root) NOPASSWD: $DEST_BIN_DIR/focus-apply.sh" > "$SUDOERS_FILE"
-chmod 440 "$SUDOERS_FILE" # Droits stricts obligatoires pour sudoers
+chmod 440 "$SUDOERS_FILE"
 
-echo "✅ Droits accordés. Le serveur Node pourra piloter le blocage sans password."
+# ==============================================================================
+# 5. Build du projet (TypeScript -> JS)
+# ==============================================================================
+echo "📦 [5/6] Compilation du serveur..."
+
+if sudo -u "$REAL_USER" command -v yarn >/dev/null 2>&1; then
+    CMD_INSTALL="yarn install"
+    CMD_BUILD="yarn build"
+else
+    CMD_INSTALL="npm install"
+    CMD_BUILD="npm run build"
+fi
+
+echo "   -> Installation des dépendances ($CMD_INSTALL)..."
+cd "$REPO_DIR"
+sudo -u "$REAL_USER" $CMD_INSTALL >/dev/null 2>&1
+
+echo "   -> Compilation ($CMD_BUILD)..."
+if sudo -u "$REAL_USER" $CMD_BUILD; then
+    echo "   ✅ Build succès."
+else
+    echo "❌ Erreur lors du build. Vérifiez le code TypeScript."
+    exit 1
+fi
+
+# ==============================================================================
+# 6. Automatisation du lancement (Launchd)
+# ==============================================================================
+echo "🤖 [6/6] Configuration du démarrage automatique..."
+
+# Trouver le chemin de Node pour l'utilisateur réel
+NODE_BIN=$(sudo -u "$REAL_USER" which node || true)
+
+if [[ -z "$NODE_BIN" ]]; then
+    echo "⚠️  'which node' n'a rien retourné. Recherche des chemins standards..."
+    if [[ -x "/opt/homebrew/bin/node" ]]; then
+        NODE_BIN="/opt/homebrew/bin/node"
+    elif [[ -x "/usr/local/bin/node" ]]; then
+        NODE_BIN="/usr/local/bin/node"
+    else
+        echo "❌ Erreur critique : Node.js introuvable."
+        echo "   Installez Node ou vérifiez qu'il est dans le PATH de $REAL_USER."
+        exit 1
+    fi
+fi
+
+echo "   -> Node trouvé : $NODE_BIN"
+
+APP_LABEL="com.focus.server"
+PLIST_DEST="$REAL_HOME/Library/LaunchAgents/${APP_LABEL}.plist"
+SERVER_SCRIPT="$REPO_DIR/dist/server.js"
+
+# Création du fichier .plist
+cat <<EOF > "$PLIST_DEST"
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>${APP_LABEL}</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>${NODE_BIN}</string>
+        <string>${SERVER_SCRIPT}</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>${REPO_DIR}</string>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/tmp/focus-server.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/focus-server.err.log</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <key>PORT</key>
+        <string>5050</string>
+    </dict>
+</dict>
+</plist>
+EOF
+
+# Donner la propriété du fichier à l'utilisateur (sinon launchd ne peut pas le lire)
+chown "$REAL_USER" "$PLIST_DEST"
+
+# Recharger le service
+echo "🚀 Activation du service..."
+sudo -u "$REAL_USER" launchctl unload "$PLIST_DEST" 2>/dev/null || true
+sudo -u "$REAL_USER" launchctl load "$PLIST_DEST"
 
 echo
-echo "✨ Installation terminée avec succès !"
-echo "   - Les fichiers sont en place."
-echo "   - Le firewall est prêt (mais inactif pour l'instant)."
-echo "   - Tu peux lancer ton serveur Node maintenant."
+echo "✨ Installation COMPLÈTE !"
+echo "   - Le système est configuré."
+echo "   - Le serveur Node est compilé et démarré."
+echo "   - Il se relancera automatiquement à chaque démarrage du Mac."
+echo
+echo "📜 Voir les logs : tail -f /tmp/focus-server.out.log"
