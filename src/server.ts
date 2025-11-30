@@ -10,7 +10,7 @@ dayjs.extend(isBetween);
 // ⚙️ CONFIGURATION
 // =============================================================================
 
-const PORT: number = Number(process.env.PORT) ?? 3000;
+const PORT: number = Number(process.env.PORT) ?? 5050;
 const CHECK_INTERVAL_MS = 1 * 60 * 1000; // 1 minute
 const SCRIPT_PATH = "/usr/local/bin/focus-apply.sh";
 
