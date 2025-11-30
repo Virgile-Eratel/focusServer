@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json.schemastore.org/prettierrc",
+  "printWidth": 120,
+  "singleQuote": true,
+  "endOfLine": "auto",
+  "singleAttributePerLine": true,
+
+  "overrides": [
+    {
+      "files": ["*.html"],
+      "options": {
+        "singleQuote": false
+      }
+    },
+    {
+      "files": ["*.scss"],
+      "options": {
+        "singleQuote": false
+      }
+    }
+  ]
+}
