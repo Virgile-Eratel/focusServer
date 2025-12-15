@@ -4,7 +4,7 @@
   "author": "Virgile Eratel",
   "scripts": {
     "build": "tsc --project ./",
-    "start:dev": "nodemon src/server.ts",
+    "start:dev": "nodemon --watch src --ext ts --exec ts-node src/server.ts",
     "start:prod": "node dist/server.js"
   },
   "dependencies": {
