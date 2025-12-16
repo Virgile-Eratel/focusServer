@@ -84,10 +84,18 @@ echo "🧹 [3/6] Suppression des fichiers binaires..."
 rm -f /usr/local/bin/focus-apply.sh
 echo "   -> Script binaire supprimé"
 
+# Nouveau layout: tout dans /usr/local/etc/focus
+rm -f /usr/local/etc/focus/hosts.blocked
+rm -f /usr/local/etc/focus/hosts.unblocked
+rm -f /usr/local/etc/focus/pf.user.conf.template
+rm -f /usr/local/etc/focus/domains.json
+rmdir /usr/local/etc/focus 2>/dev/null || true
+
+# Legacy cleanup (anciens emplacements)
 rm -f /usr/local/etc/hosts.blocked
 rm -f /usr/local/etc/hosts.unblocked
 rm -f /usr/local/etc/pf.user.conf.template
-rmdir /usr/local/etc 2>/dev/null || true
+
 echo "   -> Fichiers de configuration supprimés"
 
 

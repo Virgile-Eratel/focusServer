@@ -28,17 +28,41 @@ SRC_CONFIG="$REPO_DIR/config"
 SRC_SCRIPTS="$REPO_DIR/scripts"
 
 DEST_CONFIG_DIR="/usr/local/etc"
+DEST_FOCUS_DIR="/usr/local/etc/focus"
 DEST_BIN_DIR="/usr/local/bin"
 
 # ==============================================================================
 # 1. Installation des fichiers de configuration
 # ==============================================================================
 echo "📂 [1/6] Mise en place des fichiers config..."
-mkdir -p "$DEST_CONFIG_DIR"
+mkdir -p "$DEST_FOCUS_DIR"
 
-install -m 644 "$SRC_CONFIG/hosts.blocked"       "$DEST_CONFIG_DIR/hosts.blocked"
-install -m 644 "$SRC_CONFIG/hosts.unblocked"     "$DEST_CONFIG_DIR/hosts.unblocked"
-install -m 644 "$SRC_CONFIG/pf.user.conf.template" "$DEST_CONFIG_DIR/pf.user.conf.template"
+install -m 644 "$SRC_CONFIG/hosts.unblocked" "$DEST_FOCUS_DIR/hosts.unblocked"
+
+# (blocklist)
+install -m 644 "$SRC_CONFIG/domains.json" "$DEST_FOCUS_DIR/domains.json"
+
+# Génération des fichiers système depuis domains.json
+echo "⚙️  Génération hosts.blocked et pf.user.conf.template depuis domains.json..."
+NODE_BIN=$(sudo -u "$REAL_USER" which node || true)
+if [[ -z "$NODE_BIN" ]]; then
+    echo "⚠️  'which node' n'a rien retourné. Recherche des chemins standards..."
+    if [[ -x "/opt/homebrew/bin/node" ]]; then
+        NODE_BIN="/opt/homebrew/bin/node"
+    elif [[ -x "/usr/local/bin/node" ]]; then
+        NODE_BIN="/usr/local/bin/node"
+    else
+        echo "❌ Erreur critique : Node.js introuvable."
+        exit 1
+    fi
+fi
+
+
+"$NODE_BIN" "$REPO_DIR/scripts/generate-system-config.js" \
+  --input "$DEST_FOCUS_DIR/domains.json" \
+  --out-dir "$DEST_FOCUS_DIR"
+
+chmod 644 "$DEST_FOCUS_DIR/hosts.blocked" "$DEST_FOCUS_DIR/pf.user.conf.template" || true
 
 # ==============================================================================
 # 2. Installation du script de contrôle (Moteur)

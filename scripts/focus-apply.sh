@@ -9,12 +9,13 @@ set -euo pipefail
 LOG="/var/log/focus-apply.log"
 
 # Chemins des hosts
-BLOCKED="/usr/local/etc/hosts.blocked"
-UNBLOCKED="/usr/local/etc/hosts.unblocked"
+FOCUS_DIR="/usr/local/etc/focus"
+BLOCKED="$FOCUS_DIR/hosts.blocked"
+UNBLOCKED="$FOCUS_DIR/hosts.unblocked"
 TARGET="/etc/hosts"
 
 # PF
-PF_TEMPLATE="/usr/local/etc/pf.user.conf.template"
+PF_TEMPLATE="$FOCUS_DIR/pf.user.conf.template"
 PF_USER_CONF="/etc/pf.user.conf"
 PF_CONF="/etc/pf.conf"
 ANCHOR_NAME="user-block"
