@@ -23,9 +23,10 @@ REAL_HOME=$(eval echo "~$REAL_USER")
 echo "🔧 Installation de focusServer pour l'utilisateur : $REAL_USER"
 
 # Chemins
-REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SRC_CONFIG="$REPO_DIR/config"
-SRC_SCRIPTS="$REPO_DIR/scripts"
+SERVER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+MONOREPO_ROOT="$(cd "$SERVER_DIR/../.." && pwd)"
+SRC_CONFIG="$SERVER_DIR/config"
+SRC_SCRIPTS="$SERVER_DIR/scripts"
 
 DEST_CONFIG_DIR="/usr/local/etc"
 DEST_FOCUS_DIR="/usr/local/etc/focus"
@@ -58,7 +59,7 @@ if [[ -z "$NODE_BIN" ]]; then
 fi
 
 
-"$NODE_BIN" "$REPO_DIR/scripts/generate-system-config.js" \
+"$NODE_BIN" "$SERVER_DIR/scripts/generate-system-config.js" \
   --input "$DEST_FOCUS_DIR/domains.json" \
   --out-dir "$DEST_FOCUS_DIR"
 
@@ -106,14 +107,14 @@ echo "📦 [5/6] Compilation du serveur..."
 
 if sudo -u "$REAL_USER" command -v pnpm >/dev/null 2>&1; then
     CMD_INSTALL="pnpm install"
-    CMD_BUILD="pnpm build"
+    CMD_BUILD="pnpm build:server"
 else
     CMD_INSTALL="npm install"
-    CMD_BUILD="npm run build"
+    CMD_BUILD="npm run build:server"
 fi
 
 echo "   -> Installation des dépendances ($CMD_INSTALL)..."
-cd "$REPO_DIR"
+cd "$MONOREPO_ROOT"
 sudo -u "$REAL_USER" $CMD_INSTALL >/dev/null 2>&1
 
 echo "   -> Compilation ($CMD_BUILD)..."
@@ -149,7 +150,7 @@ echo "   -> Node trouvé : $NODE_BIN"
 
 APP_LABEL="com.focus.server"
 PLIST_DEST="$REAL_HOME/Library/LaunchAgents/${APP_LABEL}.plist"
-SERVER_SCRIPT="$REPO_DIR/dist/server.js"
+SERVER_SCRIPT="$SERVER_DIR/dist/server.js"
 
 # Création du fichier .plist
 cat <<EOF > "$PLIST_DEST"
@@ -165,7 +166,7 @@ cat <<EOF > "$PLIST_DEST"
         <string>${SERVER_SCRIPT}</string>
     </array>
     <key>WorkingDirectory</key>
-    <string>${REPO_DIR}</string>
+    <string>${SERVER_DIR}</string>
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
@@ -179,7 +180,7 @@ cat <<EOF > "$PLIST_DEST"
         <key>PATH</key>
         <string>/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
         <key>PORT</key>
-        <string>5050</string>
+        <string>5959</string>
     </dict>
 </dict>
 </plist>

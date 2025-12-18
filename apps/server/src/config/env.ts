@@ -6,7 +6,7 @@ function parsePort(value: string | undefined, fallback: number): number {
 }
 
 export const env = {
-  port: parsePort(process.env.PORT, 5050),
+  port: parsePort(process.env.PORT, 5959),
   host: process.env.HOST ?? '127.0.0.1',
   focusScriptPath: process.env.FOCUS_SCRIPT_PATH ?? '/usr/local/bin/focus-apply.sh',
   checkIntervalMs: (() => {
