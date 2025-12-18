@@ -1,0 +1,15 @@
+{
+  "name": "@focus/extension",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {},
+  "dependencies": {
+    "@focus/api-client": "workspace:*",
+    "@focus/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.268",
+    "typescript": "^5.9.3"
+  }
+}

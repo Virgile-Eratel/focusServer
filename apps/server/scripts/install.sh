@@ -104,9 +104,9 @@ chmod 440 "$SUDOERS_FILE"
 # ==============================================================================
 echo "📦 [5/6] Compilation du serveur..."
 
-if sudo -u "$REAL_USER" command -v yarn >/dev/null 2>&1; then
-    CMD_INSTALL="yarn install"
-    CMD_BUILD="yarn build"
+if sudo -u "$REAL_USER" command -v pnpm >/dev/null 2>&1; then
+    CMD_INSTALL="pnpm install"
+    CMD_BUILD="pnpm build"
 else
     CMD_INSTALL="npm install"
     CMD_BUILD="npm run build"

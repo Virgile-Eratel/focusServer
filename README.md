@@ -3,7 +3,15 @@
 Bloque totalement une liste de sites définit sur des periodes définit. 
 
 ## Mise en place
-1. Installer et démarrer
+1. Ajouter les droits d'execution pour les scipts
+```bash
+chmod +x scripts/install.sh
+chmod +x scripts/uninstall.sh
+chmod +x scripts/update-blocklist.sh
+chmod +x scripts/focus-apply.sh
+```
+
+2. Installer et démarrer
 ```bash
 sudo ./scripts/install.sh
 ```

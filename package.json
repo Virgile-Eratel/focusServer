@@ -1,26 +1,17 @@
 {
   "name": "focusServer",
-  "packageManager": "yarn@4.4.1",
+  "private": true,
+  "packageManager": "pnpm@10.2.1",
   "author": "Virgile Eratel",
   "scripts": {
-    "build": "tsc --project ./",
-    "start:dev": "nodemon --watch src --ext ts --exec ts-node src/server.ts",
-    "start:prod": "node dist/server.js"
-  },
-  "dependencies": {
-    "cors": "^2.8.5",
-    "dayjs": "^1.11.19",
-    "dotenv": "^17.2.3",
-    "express": "^5.1.0"
+    "dev": "pnpm -r --parallel dev",
+    "build": "pnpm -r build",
+    "dev:server": "pnpm --filter @focus/server dev",
+    "build:server": "pnpm --filter @focus/server build",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "devDependencies": {
-    "@types/cors": "^2.8.19",
-    "@types/express": "^5.0.5",
-    "@types/node": "^24.10.1",
-    "nodemon": "^3.1.11",
-    "prettier": "3.7.3",
-    "ts-node": "^10.9.2",
-    "ts-node-dev": "^2.0.0",
-    "typescript": "^5.9.3"
+    "prettier": "^3.7.3"
   }
 }

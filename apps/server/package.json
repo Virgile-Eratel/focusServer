@@ -1,0 +1,25 @@
+{
+  "name": "@focus/server",
+  "private": true,
+  "author": "Virgile Eratel",
+  "scripts": {
+    "build": "tsc --project ./",
+    "dev": "nodemon --watch src --ext ts --exec ts-node src/server.ts",
+    "start": "node dist/server.js"
+  },
+  "dependencies": {
+    "@focus/shared": "workspace:*",
+    "cors": "^2.8.5",
+    "dayjs": "^1.11.19",
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.5",
+    "@types/node": "^24.10.1",
+    "nodemon": "^3.1.11",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  }
+}
