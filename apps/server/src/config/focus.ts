@@ -11,7 +11,3 @@ export const ALLOWED_PAUSES: PauseWindow[] = [
 export const ALLOWED_ORIGINS: string[] = [
   // exemple: "chrome-extension://abcdefghijklmnop..."
 ];
-
-// Weekdays (Mon-Fri): 20 min total; Weekend (Sat-Sun): 90 min total
-export const WEEKDAY_PAUSE_LIMIT_MIN = 20;
-export const WEEKEND_PAUSE_LIMIT_MIN = 90;

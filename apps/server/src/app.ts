@@ -1,17 +1,34 @@
 import express from 'express';
-import { createCorsMiddleware } from './middleware/cors';
-import { createRoutes } from './routes';
+import { CorsOptions } from 'cors';
+import { ALLOWED_ORIGINS } from './config/focus';
+import cors from 'cors';
+import health from './routes/health';
+import notFoundMiddleware from './middleware/notFound.middleware';
+import routes from './routes';
 
-export function createApp(deps: {
-  allowedOrigins: string[];
-  routesDeps: Parameters<typeof createRoutes>[0];
-}) {
-  const app = express();
+const corsOptions: CorsOptions = {
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true);
 
-  app.use(createCorsMiddleware(deps.allowedOrigins));
-  app.use(express.json());
+    if (ALLOWED_ORIGINS.includes(origin)) {
+      callback(null, true);
+    } else {
+      console.warn(`CORS - Tentative d'accès bloquée depuis : ${origin}`);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  methods: ['GET'],
+  allowedHeaders: ['Content-Type'],
+};
 
-  app.use(createRoutes(deps.routesDeps));
+const app = express();
 
-  return app;
-}
+app.use(cors(corsOptions));
+
+app.use(express.json({}));
+app.use(health);
+app.use('/api/v1', routes);
+
+app.use(notFoundMiddleware);
+
+export default app;

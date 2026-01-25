@@ -33,7 +33,7 @@ MODE="${1:-}"
 
 if [[ "$MODE" != "blocked" && "$MODE" != "unblocked" ]]; then
   log "ERROR invalid argument: $MODE"
-  echo "Usage: sudo focus-apply.sh [blocked|unblocked]"
+  echo "ERROR: Invalid mode '$MODE'. Expected 'blocked' or 'unblocked'" >&2
   exit 1
 fi
 

@@ -1,13 +1,8 @@
-import { Router } from 'express';
-import type { HealthController } from '../controllers/healthController';
-import type { FocusController } from '../controllers/focusController';
-import { createFocusRoutes } from './focusRoutes';
+import express, { Router } from "express";
+import focusRouter from './focus.routes';
 
-export function createRoutes(deps: { healthController: HealthController; focusController: FocusController }) {
-  const router = Router();
+const router: Router = express.Router();
 
-  router.get('/health', deps.healthController.getHealth);
-  router.use(createFocusRoutes(deps.focusController));
+router.use('/focus', focusRouter);
 
-  return router;
-}
+export default router;
