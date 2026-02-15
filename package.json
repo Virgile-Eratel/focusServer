@@ -8,6 +8,7 @@
     "build": "pnpm -r build",
     "dev:server": "pnpm --filter @focus/shared build && pnpm --filter @focus/shared --filter @focus/server run dev",
     "build:server": "pnpm --filter @focus/shared build && pnpm --filter @focus/server build",
+    "build:extension": "pnpm --filter @focus/shared build && pnpm --filter @focus/extension build",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },

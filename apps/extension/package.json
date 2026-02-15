@@ -3,7 +3,9 @@
   "version": "0.0.1",
   "private": true,
   "type": "module",
-  "scripts": {},
+  "scripts": {
+    "build": "tsc --project ./"
+  },
   "dependencies": {
     "@focus/api-client": "workspace:*",
     "@focus/shared": "workspace:*"

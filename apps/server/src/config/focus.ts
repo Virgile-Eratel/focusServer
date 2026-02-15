@@ -9,5 +9,5 @@ export const ALLOWED_PAUSES: PauseWindow[] = [
 ];
 
 export const ALLOWED_ORIGINS: string[] = [
-  // exemple: "chrome-extension://abcdefghijklmnop..."
+  "chrome-extension://liagedkhmgfhfmhpjpjgjbilpcdhicif",
 ];

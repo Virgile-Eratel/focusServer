@@ -1,0 +1,41 @@
+<html>
+  <head>
+    <style>
+      body {
+        width: 260px;
+        padding: 16px;
+        font-family: system-ui, -apple-system, sans-serif;
+        margin: 0;
+        text-align: center;
+      }
+      h1 {
+        font-size: 16px;
+        margin: 0 0 12px 0;
+        color: #1a1a1a;
+      }
+      #status {
+        padding: 10px 14px;
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: 500;
+      }
+      #status.loading {
+        background-color: #f0f0f0;
+        color: #666;
+      }
+      #status.ok {
+        background-color: #d4edda;
+        color: #155724;
+      }
+      #status.error {
+        background-color: #f8d7da;
+        color: #721c24;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>FocusServer</h1>
+    <div id="status" class="loading">Checking server…</div>
+    <script src="dist/index.js"></script>
+  </body>
+</html>
