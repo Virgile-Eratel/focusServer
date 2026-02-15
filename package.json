@@ -6,8 +6,8 @@
   "scripts": {
     "dev": "pnpm -r --parallel dev",
     "build": "pnpm -r build",
-    "dev:server": "pnpm --filter @focus/server dev",
-    "build:server": "pnpm --filter @focus/server build",
+    "dev:server": "pnpm --filter @focus/shared build && pnpm --filter @focus/shared --filter @focus/server run dev",
+    "build:server": "pnpm --filter @focus/shared build && pnpm --filter @focus/server build",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },

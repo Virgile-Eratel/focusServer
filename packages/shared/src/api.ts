@@ -1,31 +1,13 @@
-import type { ManualPauseQuota } from './focus';
+import { FocusMode } from "./types/focusMode";
 
 // GET /health
 export type HealthResponse = {
-  status: 'ok';
-};
-
-// POST /pause (success)
-export type PauseResponse = {
-  status: 'paused';
-  grantedMinutes: number;
-  manualPauseUntil: string;
-  manualPauseQuota: ManualPauseQuota;
-};
-
-// POST /pause (429 - quota exceeded)
-export type PauseLimitReachedResponse = {
-  status: 'pause_limit_reached';
   message: string;
-  manualPauseQuota: ManualPauseQuota;
 };
 
-// POST /resume
-export type ResumeResponse = {
-  status: 'resumed';
-  manualPauseUntil: null;
+// GET focus/status
+export type FocusStatusResponse = {
+  mode: FocusMode;
+  isScheduledPause: boolean;
+  time: string;
 };
-
-// Union type for pause endpoint
-export type PauseResult = PauseResponse | PauseLimitReachedResponse;
-

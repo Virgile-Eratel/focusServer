@@ -2,16 +2,31 @@
   "name": "@focus/shared",
   "version": "0.0.1",
   "private": true,
-  "main": "./src/index.ts",
-  "types": "./src/index.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
-    ".": "./src/index.ts",
-    "./src/types/focus": "./src/types/focus.ts",
-    "./src/types/focusMode": "./src/types/focusMode.ts",
-    "./src/api": "./src/api.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./src/types/focus": {
+      "types": "./dist/types/focus.d.ts",
+      "default": "./dist/types/focus.js"
+    },
+    "./src/types/focusMode": {
+      "types": "./dist/types/focusMode.d.ts",
+      "default": "./dist/types/focusMode.js"
+    },
+    "./src/api": {
+      "types": "./dist/api.d.ts",
+      "default": "./dist/api.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --project ./",
+    "dev": "tsc --watch --project ./"
   },
   "devDependencies": {
     "typescript": "^5.9.3"
   }
 }
-
