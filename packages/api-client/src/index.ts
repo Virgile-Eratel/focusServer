@@ -4,13 +4,7 @@ export type { FocusApiClient, FocusApiClientOptions } from './client';
 export type {
   FocusStatus,
   FocusMode,
-  FocusRuntimeMode,
-  ManualPauseQuota,
-  PauseWindow,
   HealthResponse,
-  PauseResponse,
-  PauseLimitReachedResponse,
-  PauseResult,
-  ResumeResponse,
+  DomainsResponse,
 } from '@focus/shared';
 

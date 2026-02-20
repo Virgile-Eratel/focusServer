@@ -4,7 +4,7 @@
   "description": "FocusServer extension",
   "version": "0.0.1",
   "action": {
-    "default_popup": "hello.html",
+    "default_popup": "index.html",
     "default_title": "FocusServer",
     "default_icon": "icons/icon128.png"
   },
@@ -14,6 +14,16 @@
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
+  "background": {
+    "service_worker": "dist/background.js",
+    "type": "module"
+  },
+  "permissions": [
+    "alarms",
+    "declarativeNetRequest",
+    "storage",
+    "tabs"
+  ],
   "host_permissions": [
     "http://localhost:5959/*"
   ]

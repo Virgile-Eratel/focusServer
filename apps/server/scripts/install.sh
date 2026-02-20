@@ -41,8 +41,8 @@ PF_CONF="/etc/pf.conf"
 grep -q 'anchor "user-block"' "$PF_CONF" || \
     printf '\n# focusServer\nanchor "user-block"\nload anchor "user-block" from "/etc/pf.user.conf"\n' >> "$PF_CONF"
 : > /etc/pf.user.conf
-pfctl -f "$PF_CONF" 2>/dev/null || true
-pfctl -E 2>/dev/null || true
+/sbin/pfctl -f "$PF_CONF" 2>/dev/null || true
+/sbin/pfctl -E 2>/dev/null || true
 
 # 4. Sudoers
 echo "🔑 [4/5] Droits sudo..."
@@ -76,7 +76,7 @@ cat <<EOF > "$PLIST"
     <key>StandardErrorPath</key><string>/tmp/focus-server.err.log</string>
     <key>EnvironmentVariables</key>
     <dict>
-        <key>PATH</key><string>/usr/local/bin:/usr/bin:/bin</string>
+        <key>PATH</key><string>/usr/local/bin:/usr/bin:/bin:/sbin:/usr/sbin</string>
     </dict>
 </dict>
 </plist>

@@ -63,27 +63,27 @@ log "Configuring PF..."
 
 # 1. S'assurer que PF est activé (-E : Enable if not already enabled)
 # On ignore l'erreur si c'est déjà activé ou impossible (pour ne pas crash le script)
-pfctl -E 2>/dev/null || true
+/sbin/pfctl -E 2>/dev/null || true
 
 # 2. Recharger l'anchor spécifique (Plus rapide et ne touche pas au reste du système)
 # Syntax check de l'anchor seule
-if pfctl -a "$ANCHOR_NAME" -nf "$PF_USER_CONF"; then
+if /sbin/pfctl -a "$ANCHOR_NAME" -nf "$PF_USER_CONF"; then
     log "Reloading specific anchor: $ANCHOR_NAME"
-    pfctl -a "$ANCHOR_NAME" -f "$PF_USER_CONF" 2>/dev/null
+    /sbin/pfctl -a "$ANCHOR_NAME" -f "$PF_USER_CONF" 2>/dev/null
 else
     # Fallback : Si l'anchor n'est pas chargée, on recharge tout le fichier principal
     log "Anchor reload failed or not loaded. Reloading full /etc/pf.conf"
-    pfctl -f "$PF_CONF" 2>/dev/null
+    /sbin/pfctl -f "$PF_CONF" 2>/dev/null
 fi
 
 # ===== FLUSH DNS =====
 log "Flushing DNS caches"
-dscacheutil -flushcache 2>/dev/null || true
-killall -HUP mDNSResponder 2>/dev/null || true
+/usr/bin/dscacheutil -flushcache 2>/dev/null || true
+/usr/bin/killall -HUP mDNSResponder 2>/dev/null || true
 
 log "Killing active states..."
-pfctl -k 0.0.0.0/0 -k 0.0.0.0/0 2>/dev/null || true
-pfctl -k ::/0 -k ::/0 2>/dev/null || true
+/sbin/pfctl -k 0.0.0.0/0 -k 0.0.0.0/0 2>/dev/null || true
+/sbin/pfctl -k ::/0 -k ::/0 2>/dev/null || true
 
 log "focus-apply DONE (mode=$MODE)"
 exit 0

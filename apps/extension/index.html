@@ -31,11 +31,31 @@
         background-color: #f8d7da;
         color: #721c24;
       }
+      #focus-mode {
+        margin-top: 12px;
+        padding: 10px 14px;
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: 600;
+      }
+      #focus-mode.blocked {
+        background-color: #f8d7da;
+        color: #721c24;
+      }
+      #focus-mode.unblocked {
+        background-color: #d4edda;
+        color: #155724;
+      }
+      #focus-mode.unknown {
+        background-color: #f0f0f0;
+        color: #666;
+      }
     </style>
   </head>
   <body>
     <h1>FocusServer</h1>
     <div id="status" class="loading">Checking server…</div>
-    <script src="dist/index.js"></script>
+    <div id="focus-mode" class="unknown">— —</div>
+    <script type="module" src="dist/index.js"></script>
   </body>
 </html>

@@ -11,3 +11,8 @@ export type FocusStatusResponse = {
   isScheduledPause: boolean;
   time: string;
 };
+
+// GET focus/domains
+export type DomainsResponse = {
+  domains: string[];
+};

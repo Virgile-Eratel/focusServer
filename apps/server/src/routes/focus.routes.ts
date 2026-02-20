@@ -5,5 +5,6 @@ const router: Router = express.Router();
 
 
 router.get('/status', focusController.getStatus);
+router.get('/domains', focusController.getDomains);
 
 export default router;
