@@ -28,3 +28,5 @@ pnpm-debug.log*
 apps/extension/.crx
 
 .claude
+
+*.claude_review_state.json

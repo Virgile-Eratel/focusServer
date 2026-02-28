@@ -1,4 +1,4 @@
-import type { DomainsResponse, FocusMode, FocusStatusResponse } from "@focus/shared";
+import type { DomainsResponse, FocusMode, FocusStatusResponse } from '@focus/shared';
 
 const API_BASE = 'http://localhost:5959/api/v1/focus';
 const ALARM_NAME = 'focus-status-poll';
@@ -7,11 +7,18 @@ const POLL_INTERVAL_MINUTES = 0.5; // 30 seconds
 const STORAGE_KEY_PREV_MODE = 'previousMode';
 const STORAGE_KEY_DOMAINS = 'cachedDomains';
 
-
 // --- API calls ---
 
+const FETCH_TIMEOUT_MS = 5000;
+
+function fetchWithTimeout(url: string): Promise<Response> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
+  return fetch(url, { signal: ctrl.signal }).finally(() => clearTimeout(timer));
+}
+
 async function fetchStatus(): Promise<FocusStatusResponse> {
-  const res = await fetch(`${API_BASE}/status`);
+  const res = await fetchWithTimeout(`${API_BASE}/status`);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }
@@ -22,7 +29,7 @@ async function fetchDomains(forceRefresh = false): Promise<string[]> {
     if (stored[STORAGE_KEY_DOMAINS]) return stored[STORAGE_KEY_DOMAINS] as string[];
   }
 
-  const res = await fetch(`${API_BASE}/domains`);
+  const res = await fetchWithTimeout(`${API_BASE}/domains`);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const data: DomainsResponse = await res.json();
   await chrome.storage.local.set({ [STORAGE_KEY_DOMAINS]: data.domains });
@@ -36,12 +43,14 @@ const BLOCKING_RULE_ID = 1;
 async function applyBlockingRules(domains: string[]): Promise<void> {
   await chrome.declarativeNetRequest.updateDynamicRules({
     removeRuleIds: [BLOCKING_RULE_ID],
-    addRules: [{
-      id: BLOCKING_RULE_ID,
-      priority: 1,
-      action: { type: chrome.declarativeNetRequest.RuleActionType.BLOCK },
-      condition: { requestDomains: domains },
-    }],
+    addRules: [
+      {
+        id: BLOCKING_RULE_ID,
+        priority: 1,
+        action: { type: chrome.declarativeNetRequest.RuleActionType.BLOCK },
+        condition: { requestDomains: domains },
+      },
+    ],
   });
 }
 
@@ -78,8 +87,7 @@ async function checkAndReload(): Promise<void> {
     const stored = await chrome.storage.local.get(STORAGE_KEY_PREV_MODE);
     const previousMode: FocusMode | undefined = stored[STORAGE_KEY_PREV_MODE];
 
-    const isTransitionToBlocked =
-      previousMode === 'unblocked' && status.mode === 'blocked';
+    const isTransitionToBlocked = previousMode === 'unblocked' && status.mode === 'blocked';
 
     await chrome.storage.local.set({ [STORAGE_KEY_PREV_MODE]: status.mode });
 
