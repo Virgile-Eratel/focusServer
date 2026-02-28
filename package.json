@@ -13,6 +13,11 @@
     "format:check": "prettier --check .",
     "test:server": "pnpm --filter @focus/server test"
   },
+  "pnpm": {
+    "overrides": {
+      "qs": ">=6.15.0"
+    }
+  },
   "devDependencies": {
     "prettier": "^3.7.3"
   }
