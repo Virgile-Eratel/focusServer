@@ -1,14 +1,14 @@
 import { readFileSync } from 'fs';
 import path from 'path';
 
-type DomainEntry = {
+export type DomainEntry = {
   domain: string;
   aliases?: string[];
   includeWww?: boolean;
   includeMobile?: boolean;
 };
 
-type DomainsConfig = {
+export type DomainsConfig = {
   version: number;
   defaults: {
     includeWww: boolean;
@@ -25,13 +25,10 @@ function loadDomainsConfig(): DomainsConfig {
 }
 
 /**
- * Expands domains.json into a flat deduplicated list of hostnames.
+ * Pure function: expands a DomainsConfig into a flat deduplicated list of hostnames.
  * Mirrors the expansion logic from scripts/generate-system-config.js
  */
-export function getExpandedDomains(): string[] {
-  if (cachedDomains) return cachedDomains;
-
-  const config = loadDomainsConfig();
+export function expandDomainEntries(config: DomainsConfig): string[] {
   const domains = new Set<string>();
 
   for (const entry of config.entries) {
@@ -51,6 +48,12 @@ export function getExpandedDomains(): string[] {
     }
   }
 
-  cachedDomains = Array.from(domains);
+  return Array.from(domains);
+}
+
+/** Cached wrapper — reads domains.json once, then returns from cache. */
+export function getExpandedDomains(): string[] {
+  if (cachedDomains) return cachedDomains;
+  cachedDomains = expandDomainEntries(loadDomainsConfig());
   return cachedDomains;
 }

@@ -10,7 +10,8 @@
     "build:server": "pnpm --filter @focus/shared build && pnpm --filter @focus/server build",
     "build:extension": "pnpm --filter @focus/shared build && pnpm --filter @focus/extension build",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "test:server": "pnpm --filter @focus/server test"
   },
   "devDependencies": {
     "prettier": "^3.7.3"

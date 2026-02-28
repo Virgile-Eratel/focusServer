@@ -1,26 +1,22 @@
-import dayjs from '../utils/dayjs';
+import dayjs, { type Dayjs } from '../utils/dayjs';
 import { ACTIVE_DAYS, ALLOWED_PAUSES, type PauseWindow } from '../config/focus';
 
-
-const activeDays = ACTIVE_DAYS;
-const allowedPauses: PauseWindow[] = ALLOWED_PAUSES;
-
-function getTodayAt(timeStr: string) {
-  const [hour, minute] = timeStr.split(':').map(Number);
-  return dayjs().hour(hour).minute(minute).second(0);
-}
-
-export const isScheduledPause = (): boolean => {
-  const now = dayjs();
-
+/**
+ * Pure function: determines if `now` falls within a scheduled pause window.
+ * Returns true when blocking should be paused (inactive day or inside a pause window).
+ */
+export function isInPauseWindow(now: Dayjs, activeDays: number[], pauses: PauseWindow[]): boolean {
   // Not active days -> unblocked
   if (!activeDays.includes(now.day())) {
     return true;
   }
 
-  for (const pause of allowedPauses) {
-    const start = getTodayAt(pause.start);
-    const end = getTodayAt(pause.end);
+  for (const pause of pauses) {
+    const [startH, startM] = pause.start.split(':').map(Number);
+    const [endH, endM] = pause.end.split(':').map(Number);
+
+    const start = now.hour(startH).minute(startM).second(0);
+    const end = now.hour(endH).minute(endM).second(0);
 
     if (now.isBetween(start, end, 'minute', '[)')) {
       return true;
@@ -28,4 +24,9 @@ export const isScheduledPause = (): boolean => {
   }
 
   return false;
+}
+
+/** Wrapper using live clock and production config. */
+export const isScheduledPause = (): boolean => {
+  return isInPauseWindow(dayjs(), ACTIVE_DAYS, ALLOWED_PAUSES);
 }
