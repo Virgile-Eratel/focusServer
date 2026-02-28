@@ -3,16 +3,16 @@ import { FocusModeEnum } from '@focus/shared/src/types/focusMode';
 import dayjs from '../utils/dayjs';
 import { apply } from './focusApplier.service';
 import { isScheduledPause } from './scheduleService';
+import { createChildLogger } from '../utils/logger';
 
+const log = createChildLogger('focus');
 
 let currentMode: RuntimeFocusMode = FocusModeEnum.unknown;
 let isApplying = false;
 
-
 export const getCurrentMode = () => currentMode;
 
 function calculateTargetMode(): ApplicableFocusMode {
-
   if (isScheduledPause()) {
     return FocusModeEnum.unblocked;
   }
@@ -28,20 +28,19 @@ async function applyMode(targetMode: ApplicableFocusMode) {
   }
 
   isApplying = true;
-  console.log(`Switching mode: ${currentMode} -> ${targetMode}`);
+  log.info({ from: currentMode, to: targetMode }, 'Switching mode');
 
   try {
     await apply(targetMode);
     currentMode = targetMode;
-    console.log(`Mode set to: ${targetMode}`);
+    log.info({ mode: targetMode }, 'Mode applied');
   } catch (error) {
     const e = error as Error;
-    console.error(`Error applying mode: ${e.message}`);
+    log.error({ err: e }, 'Failed to apply mode');
   } finally {
     isApplying = false;
   }
 }
-
 
 export async function tick() {
   const target = calculateTargetMode();

@@ -4,6 +4,9 @@ import { existsSync } from 'fs';
 import path from 'path';
 import type { FocusMode } from '@focus/shared/src/types/focusMode';
 import { DEFAULT_FOCUS_SCRIPT_PATH } from '../utils/constants';
+import { createChildLogger } from '../utils/logger';
+
+const log = createChildLogger('focusApplier');
 
 const execFileAsync = promisify(execFile);
 
@@ -27,17 +30,12 @@ export async function apply(mode: FocusMode): Promise<void> {
   try {
     const { stderr } = await execFileAsync('sudo', [SCRIPT_PATH, mode]);
     if (stderr) {
-      console.warn('[focus-apply] stderr:', stderr);
+      log.warn({ stderr }, 'focus-apply stderr');
     }
   } catch (error) {
     const e = error as Error & { code?: number; stderr?: string; stdout?: string };
 
-    console.error('[focus-apply] Script failed:', {
-      message: e.message,
-      exitCode: e.code,
-      stderr: e.stderr,
-      stdout: e.stdout,
-    });
+    log.error({ err: e, exitCode: e.code, stderr: e.stderr, stdout: e.stdout }, 'focus-apply failed');
 
     throw new Error(`error executing focus-apply`);
   }

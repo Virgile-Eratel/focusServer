@@ -1,9 +1,16 @@
-const timestamp = () => new Date().toISOString();
+import pino from 'pino';
 
-const originalLog = console.log.bind(console);
-const originalWarn = console.warn.bind(console);
-const originalError = console.error.bind(console);
+const isTest = process.env.NODE_ENV === 'test';
+const isDev = process.env.NODE_ENV !== 'production' && !isTest;
 
-console.log = (...args: unknown[]) => originalLog(`[${timestamp()}]`, ...args);
-console.warn = (...args: unknown[]) => originalWarn(`[${timestamp()}]`, ...args);
-console.error = (...args: unknown[]) => originalError(`[${timestamp()}]`, ...args);
+export const logger = pino({
+  level: isTest ? 'silent' : process.env.LOG_LEVEL || 'info',
+  ...(isDev && {
+    transport: {
+      target: 'pino-pretty',
+      options: { colorize: true, translateTime: 'SYS:HH:MM:ss' },
+    },
+  }),
+});
+
+export const createChildLogger = (service: string) => logger.child({ service });

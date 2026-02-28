@@ -1,5 +1,8 @@
 import { readFileSync } from 'fs';
 import path from 'path';
+import { createChildLogger } from '../utils/logger';
+
+const log = createChildLogger('domain');
 
 export type DomainEntry = {
   domain: string;
@@ -24,11 +27,12 @@ function loadDomainsConfig(): DomainsConfig {
   try {
     return JSON.parse(readFileSync(configPath, 'utf-8')) as DomainsConfig;
   } catch (error) {
+    const e = error as Error;
     const message =
       error instanceof SyntaxError
         ? `Invalid JSON in ${configPath}: ${error.message}`
-        : `Failed to read ${configPath}: ${(error as Error).message}`;
-    console.error(`[domain.service] ${message}`);
+        : `Failed to read ${configPath}: ${e.message}`;
+    log.error({ err: e, configPath }, 'Failed to load domains config');
     throw new Error(message);
   }
 }

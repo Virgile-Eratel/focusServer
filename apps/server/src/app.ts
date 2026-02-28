@@ -4,6 +4,9 @@ import { ALLOWED_ORIGINS } from './config/focus';
 import health from './routes/health';
 import notFoundMiddleware from './middleware/notFound.middleware';
 import routes from './routes';
+import { createChildLogger } from './utils/logger';
+
+const log = createChildLogger('app');
 
 const corsOptions: CorsOptions = {
   origin: function (origin, callback) {
@@ -12,7 +15,7 @@ const corsOptions: CorsOptions = {
     if (ALLOWED_ORIGINS.includes(origin)) {
       callback(null, true);
     } else {
-      console.warn(`CORS - Tentative d'accès bloquée depuis : ${origin}`);
+      log.warn({ origin }, 'CORS blocked');
       callback(new Error('Not allowed by CORS'));
     }
   },
