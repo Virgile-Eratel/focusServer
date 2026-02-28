@@ -21,7 +21,16 @@ let cachedDomains: string[] | null = null;
 
 function loadDomainsConfig(): DomainsConfig {
   const configPath = path.resolve(__dirname, '../../config/domains.json');
-  return JSON.parse(readFileSync(configPath, 'utf-8')) as DomainsConfig;
+  try {
+    return JSON.parse(readFileSync(configPath, 'utf-8')) as DomainsConfig;
+  } catch (error) {
+    const message =
+      error instanceof SyntaxError
+        ? `Invalid JSON in ${configPath}: ${error.message}`
+        : `Failed to read ${configPath}: ${(error as Error).message}`;
+    console.error(`[domain.service] ${message}`);
+    throw new Error(message);
+  }
 }
 
 /**

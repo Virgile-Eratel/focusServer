@@ -1,7 +1,6 @@
 import express from 'express';
-import { CorsOptions } from 'cors';
+import cors, { CorsOptions } from 'cors';
 import { ALLOWED_ORIGINS } from './config/focus';
-import cors from 'cors';
 import health from './routes/health';
 import notFoundMiddleware from './middleware/notFound.middleware';
 import routes from './routes';
@@ -25,7 +24,7 @@ const app = express();
 
 app.use(cors(corsOptions));
 
-app.use(express.json({}));
+app.use(express.json({ limit: '10kb' }));
 app.use(health);
 app.use('/api/v1', routes);
 
