@@ -1,3 +1,4 @@
+import './utils/logger';
 import http from 'http';
 import app from './app';
 import 'dotenv/config';

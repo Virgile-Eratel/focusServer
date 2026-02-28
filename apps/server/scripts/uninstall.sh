@@ -121,8 +121,9 @@ PLIST_PATH="$REAL_HOME/Library/LaunchAgents/${APP_LABEL}.plist"
 
 if [[ -f "$PLIST_PATH" ]]; then
     # Arrêt du service (en tant qu'utilisateur réel)
-    sudo -u "$REAL_USER" launchctl unload "$PLIST_PATH" 2>/dev/null || true
-    
+    REAL_UID=$(id -u "$REAL_USER")
+    launchctl bootout "gui/$REAL_UID/com.focus.server" 2>/dev/null || true
+
     # Suppression du fichier .plist
     rm -f "$PLIST_PATH"
     echo "   -> Service arrêté et fichier .plist supprimé"

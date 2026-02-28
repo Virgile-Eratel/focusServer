@@ -57,7 +57,9 @@ sudo -u "$REAL_USER" pnpm build:server || sudo -u "$REAL_USER" npm run build:ser
 
 # 6. Launchd (optionnel - peut être séparé)
 echo "🚀 Configuration launchd..."
+NODE_DIR="$(dirname "$NODE_BIN")"
 PLIST="$REAL_HOME/Library/LaunchAgents/com.focus.server.plist"
+mkdir -p "$(dirname "$PLIST")"
 cat <<EOF > "$PLIST"
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -76,13 +78,16 @@ cat <<EOF > "$PLIST"
     <key>StandardErrorPath</key><string>/tmp/focus-server.err.log</string>
     <key>EnvironmentVariables</key>
     <dict>
-        <key>PATH</key><string>/usr/local/bin:/usr/bin:/bin:/sbin:/usr/sbin</string>
+        <key>PATH</key><string>${NODE_DIR}:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/sbin:/usr/sbin</string>
+        <key>HOME</key><string>${REAL_HOME}</string>
+        <key>PORT</key><string>5959</string>
     </dict>
 </dict>
 </plist>
 EOF
 chown "$REAL_USER" "$PLIST"
-sudo -u "$REAL_USER" launchctl unload "$PLIST" 2>/dev/null || true
-sudo -u "$REAL_USER" launchctl load "$PLIST"
+REAL_UID=$(id -u "$REAL_USER")
+launchctl bootout "gui/$REAL_UID/com.focus.server" 2>/dev/null || true
+launchctl bootstrap "gui/$REAL_UID" "$PLIST"
 
 echo "✨ Installation terminée ! Logs: tail -f /tmp/focus-server.out.log"
