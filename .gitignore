@@ -26,3 +26,5 @@ pnpm-debug.log*
 
 # Extension build
 apps/extension/.crx
+
+.claude
