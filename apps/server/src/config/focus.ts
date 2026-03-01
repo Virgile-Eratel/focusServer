@@ -12,7 +12,7 @@ export type WeeklySchedule = Partial<Record<DayOfWeek, PauseWindow[]>>;
 export const WEEKLY_SCHEDULE: WeeklySchedule = {
   0: [
     { start: '12:00', end: '13:30' },
-    { start: '18:00', end: '19:30' },
+    { start: '15:30', end: '20:30' },
   ], // Dimanche
   1: [
     { start: '12:00', end: '13:30' },
@@ -36,7 +36,7 @@ export const WEEKLY_SCHEDULE: WeeklySchedule = {
   ], // Vendredi
   6: [
     { start: '12:00', end: '13:30' },
-    { start: '18:00', end: '19:30' },
+    { start: '15:30', end: '20:30' },
   ], // Samedi
 };
 
