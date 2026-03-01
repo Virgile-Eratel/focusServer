@@ -7,20 +7,51 @@
  * - pf.user.conf.template
  *
  * Usage:
- *   node scripts/generate-system-config.js \
+ *   node dist/scripts/generate-system-config.js \
  *     --input /path/to/domains.json \
- *     --out-dir /usr/local/etc
+ *     --out-dir /usr/local/etc/focus
  *
  * Output:
  *   <out-dir>/hosts.blocked
  *   <out-dir>/pf.user.conf.template
  */
 
-const fs = require('fs');
-const path = require('path');
+import fs from 'fs';
+import path from 'path';
+import { normalizeHostname } from '../utils/hostname';
 
-function parseArgs(argv) {
-  const args = { _: [] };
+// --- Types internes ---
+
+interface DomainJsonEntry {
+  domain: string;
+  aliases?: string[];
+  tags?: string[];
+  includeWww?: boolean;
+  includeMobile?: boolean;
+  hosts?: boolean;
+  pf?: boolean;
+}
+
+interface DomainsJson {
+  version: number;
+  defaults: {
+    includeWww?: boolean;
+    includeMobile?: boolean;
+    hosts?: boolean;
+    pf?: boolean;
+  };
+  entries: DomainJsonEntry[];
+}
+
+interface GroupData {
+  hosts: string[];
+  pf: string[];
+}
+
+// --- Utilitaires ---
+
+function parseArgs(argv: string[]): Record<string, string | boolean | string[]> & { _: string[] } {
+  const args: Record<string, string | boolean | string[]> & { _: string[] } = { _: [] };
   for (let i = 2; i < argv.length; i++) {
     const a = argv[i];
     if (a.startsWith('--')) {
@@ -39,36 +70,9 @@ function parseArgs(argv) {
   return args;
 }
 
-function normalizeHostname(input) {
-  const raw = String(input ?? '').trim().toLowerCase();
-  if (!raw) return null;
-
-  // Extract hostname from URL
-  let host = raw;
-  try {
-    if (raw.includes('://')) host = new URL(raw).hostname;
-  } catch {
-    // ignore
-  }
-
-  // Remove path/query fragments
-  host = host.split('/')[0].split('?')[0].split('#')[0];
-
-  // Remove trailing dot
-  if (host.endsWith('.')) host = host.slice(0, -1);
-
-  // Small sanity check
-  if (!/^[a-z0-9.-]+$/.test(host)) return null;
-  if (!host.includes('.')) return null;
-  if (host.startsWith('.') || host.endsWith('.')) return null;
-  if (host.includes('..')) return null;
-
-  return host;
-}
-
-function uniqueStable(list) {
-  const seen = new Set();
-  const out = [];
+function uniqueStable(list: (string | null)[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
   for (const x of list) {
     if (!x) continue;
     if (seen.has(x)) continue;
@@ -78,7 +82,7 @@ function uniqueStable(list) {
   return out;
 }
 
-function buildHostnamesForEntry(entry, defaults) {
+function buildHostnamesForEntry(entry: DomainJsonEntry, defaults: DomainsJson['defaults']): string[] {
   const domain = normalizeHostname(entry.domain);
   if (!domain) {
     throw new Error(`Invalid entry.domain: ${JSON.stringify(entry.domain)}`);
@@ -88,7 +92,7 @@ function buildHostnamesForEntry(entry, defaults) {
   const includeMobile = entry.includeMobile ?? defaults.includeMobile ?? false;
   const aliases = Array.isArray(entry.aliases) ? entry.aliases : [];
 
-  const out = [domain];
+  const out: (string | null)[] = [domain];
   if (includeWww) out.push(`www.${domain}`);
   if (includeMobile) out.push(`m.${domain}`);
   for (const a of aliases) {
@@ -99,14 +103,14 @@ function buildHostnamesForEntry(entry, defaults) {
   return uniqueStable(out);
 }
 
-function groupEntries(domainsJson) {
+function groupEntries(domainsJson: DomainsJson): Map<string, GroupData> {
   const defaults = domainsJson.defaults ?? {};
   const entries = Array.isArray(domainsJson.entries) ? domainsJson.entries : [];
 
-  const groups = new Map(); // tag -> { hosts: string[], pf: string[] }
-  const ensureGroup = (tag) => {
+  const groups = new Map<string, GroupData>();
+  const ensureGroup = (tag: string): GroupData => {
     if (!groups.has(tag)) groups.set(tag, { hosts: [], pf: [] });
-    return groups.get(tag);
+    return groups.get(tag)!;
   };
 
   for (const entry of entries) {
@@ -132,8 +136,8 @@ function groupEntries(domainsJson) {
   return groups;
 }
 
-function renderHostsBlocked(groups) {
-  const lines = [];
+function renderHostsBlocked(groups: Map<string, GroupData>): string {
+  const lines: string[] = [];
   lines.push('##');
   lines.push('# Host Database');
   lines.push('#');
@@ -161,8 +165,8 @@ function renderHostsBlocked(groups) {
   return lines.join('\n').trimEnd() + '\n';
 }
 
-function renderPfTemplate(groups) {
-  const lines = [];
+function renderPfTemplate(groups: Map<string, GroupData>): string {
+  const lines: string[] = [];
   lines.push('# ==========================================');
   lines.push('# Auto-generated PF block rules (template)');
   lines.push('# FocusServer - User Block Anchor');
@@ -184,10 +188,10 @@ function renderPfTemplate(groups) {
   return lines.join('\n').trimEnd() + '\n';
 }
 
-function main() {
+function main(): void {
   const args = parseArgs(process.argv);
-  const input = args.input || path.join(process.cwd(), 'config', 'domains.json');
-  const outDir = args['out-dir'] || args.outDir || null;
+  const input = (args.input as string) || path.join(process.cwd(), 'config', 'domains.json');
+  const outDir = (args['out-dir'] as string) || (args.outDir as string) || null;
 
   if (!outDir) {
     console.error('Missing --out-dir');
@@ -195,7 +199,7 @@ function main() {
   }
 
   const raw = fs.readFileSync(input, 'utf8');
-  const domainsJson = JSON.parse(raw);
+  const domainsJson: DomainsJson = JSON.parse(raw);
   if (domainsJson.version !== 1) {
     throw new Error(`Unsupported domains.json version: ${domainsJson.version}`);
   }
@@ -221,5 +225,3 @@ function main() {
 }
 
 main();
-
-
