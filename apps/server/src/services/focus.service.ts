@@ -12,7 +12,7 @@ let isApplying = false;
 
 export const getCurrentMode = () => currentMode;
 
-function calculateTargetMode(): ApplicableFocusMode {
+export function calculateTargetMode(): ApplicableFocusMode {
   if (isScheduledPause()) {
     return FocusModeEnum.unblocked;
   }
@@ -20,23 +20,34 @@ function calculateTargetMode(): ApplicableFocusMode {
   return FocusModeEnum.blocked;
 }
 
-async function applyMode(targetMode: ApplicableFocusMode) {
-  if (targetMode === currentMode) return;
+/**
+ * Applique le mode cible. Si force=true, contourne le guard
+ * targetMode === currentMode — utilisé après modification de la
+ * liste de domaines (les fichiers système ont changé).
+ */
+export async function applyMode(
+  targetMode: ApplicableFocusMode,
+  { force = false, reason }: { force?: boolean; reason?: string } = {},
+): Promise<void> {
+  if (!force && targetMode === currentMode) return;
 
   if (isApplying) {
+    log.warn({ targetMode, force }, 'applyMode skipped — already applying');
     return;
   }
 
   isApplying = true;
-  log.info({ from: currentMode, to: targetMode }, 'Switching mode');
+  log.info({ mode: targetMode, force, reason }, 'Applying mode');
 
   try {
     await apply(targetMode);
     currentMode = targetMode;
-    log.info({ mode: targetMode }, 'Mode applied');
+    log.info({ mode: targetMode }, 'Apply completed');
   } catch (error) {
+    // Non-fatal : le domaine est persisté dans domains.json et sera
+    // appliqué au prochain tick() (≤ 60s).
     const e = error as Error;
-    log.error({ err: e }, 'Failed to apply mode');
+    log.error({ err: e }, 'Apply failed');
   } finally {
     isApplying = false;
   }
