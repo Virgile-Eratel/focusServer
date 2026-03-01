@@ -1,17 +1,19 @@
 import dayjs, { type Dayjs } from '../utils/dayjs';
-import { ACTIVE_DAYS, ALLOWED_PAUSES, type PauseWindow } from '../config/focus';
+import { WEEKLY_SCHEDULE, type WeeklySchedule, type DayOfWeek } from '../config/focus';
 
 /**
  * Pure function: determines if `now` falls within a scheduled pause window.
  * Returns true when blocking should be paused (inactive day or inside a pause window).
  */
-export function isInPauseWindow(now: Dayjs, activeDays: number[], pauses: PauseWindow[]): boolean {
-  // Not active days -> unblocked
-  if (!activeDays.includes(now.day())) {
+export function isInPauseWindow(now: Dayjs, schedule: WeeklySchedule): boolean {
+  const dayPauses = schedule[now.day() as DayOfWeek];
+
+  // Jour absent du schedule -> non actif -> unblocked
+  if (dayPauses === undefined) {
     return true;
   }
 
-  for (const pause of pauses) {
+  for (const pause of dayPauses) {
     const [startH, startM] = pause.start.split(':').map(Number);
     const [endH, endM] = pause.end.split(':').map(Number);
 
@@ -28,5 +30,5 @@ export function isInPauseWindow(now: Dayjs, activeDays: number[], pauses: PauseW
 
 /** Wrapper using live clock and production config. */
 export const isScheduledPause = (): boolean => {
-  return isInPauseWindow(dayjs(), ACTIVE_DAYS, ALLOWED_PAUSES);
-}
+  return isInPauseWindow(dayjs(), WEEKLY_SCHEDULE);
+};
