@@ -2,60 +2,168 @@
   <head>
     <style>
       body {
-        width: 260px;
-        padding: 16px;
+        width: 300px;
+        padding: 12px;
         font-family: system-ui, -apple-system, sans-serif;
         margin: 0;
-        text-align: center;
-      }
-      h1 {
-        font-size: 16px;
-        margin: 0 0 12px 0;
+        font-size: 13px;
         color: #1a1a1a;
       }
-      #status {
-        padding: 10px 14px;
-        border-radius: 8px;
+      h1 {
+        font-size: 15px;
+        margin: 0 0 8px 0;
+        text-align: center;
+      }
+      .status-bar {
+        display: flex;
+        justify-content: space-between;
+        padding: 6px 10px;
+        border-radius: 6px;
+        background: #f0f0f0;
+        margin-bottom: 10px;
+        font-size: 12px;
+      }
+      .status-bar .ok { color: #155724; }
+      .status-bar .error { color: #721c24; }
+      .status-bar .blocked { color: #721c24; font-weight: 600; }
+      .status-bar .unblocked { color: #155724; font-weight: 600; }
+      .status-bar .unknown { color: #666; }
+
+      .section-title {
+        font-size: 12px;
+        font-weight: 600;
+        margin: 0 0 4px 0;
+        color: #555;
+      }
+
+      #domain-list {
+        max-height: 180px;
+        overflow-y: auto;
+        border: 1px solid #e0e0e0;
+        border-radius: 6px;
+        margin-bottom: 10px;
+      }
+      .domain-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 5px 8px;
+        border-bottom: 1px solid #f0f0f0;
+        font-size: 12px;
+      }
+      .domain-item:last-child { border-bottom: none; }
+      .domain-item .domain-name {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        flex: 1;
+      }
+      .domain-item .remove-btn {
+        background: none;
+        border: none;
+        color: #999;
+        cursor: pointer;
         font-size: 14px;
+        padding: 0 2px;
+        line-height: 1;
+      }
+      .domain-item .remove-btn:hover { color: #721c24; }
+      .domain-item .remove-btn.confirming {
+        color: #dc3545;
+        font-weight: 700;
+        font-size: 12px;
+      }
+
+      .empty-list {
+        padding: 12px;
+        text-align: center;
+        color: #999;
+        font-size: 12px;
+      }
+
+      .add-section { margin-bottom: 6px; }
+
+      .quick-add {
+        display: flex;
+        gap: 6px;
+        margin-bottom: 6px;
+      }
+      .quick-add button {
+        flex: 1;
+        padding: 6px 8px;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        background: #f8f8f8;
+        cursor: pointer;
+        font-size: 12px;
+        text-align: left;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .quick-add button:hover { background: #e8e8e8; }
+      .quick-add button:disabled { opacity: 0.5; cursor: default; }
+
+      .manual-add {
+        display: flex;
+        gap: 6px;
+      }
+      .manual-add input {
+        flex: 1;
+        padding: 5px 8px;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        font-size: 12px;
+        outline: none;
+      }
+      .manual-add input:focus { border-color: #4a90d9; }
+      .manual-add button {
+        padding: 5px 12px;
+        border: none;
+        border-radius: 6px;
+        background: #4a90d9;
+        color: white;
+        cursor: pointer;
+        font-size: 12px;
         font-weight: 500;
       }
-      #status.loading {
-        background-color: #f0f0f0;
-        color: #666;
+      .manual-add button:hover { background: #357abd; }
+
+      #status-msg {
+        text-align: center;
+        font-size: 11px;
+        min-height: 16px;
+        margin-top: 4px;
       }
-      #status.ok {
-        background-color: #d4edda;
-        color: #155724;
-      }
-      #status.error {
-        background-color: #f8d7da;
-        color: #721c24;
-      }
-      #focus-mode {
-        margin-top: 12px;
-        padding: 10px 14px;
-        border-radius: 8px;
-        font-size: 14px;
-        font-weight: 600;
-      }
-      #focus-mode.blocked {
-        background-color: #f8d7da;
-        color: #721c24;
-      }
-      #focus-mode.unblocked {
-        background-color: #d4edda;
-        color: #155724;
-      }
-      #focus-mode.unknown {
-        background-color: #f0f0f0;
-        color: #666;
-      }
+      #status-msg.error { color: #721c24; }
+      #status-msg.success { color: #155724; }
     </style>
   </head>
   <body>
     <h1>FocusServer</h1>
-    <div id="status" class="loading">Checking server…</div>
-    <div id="focus-mode" class="unknown">— —</div>
+
+    <div class="status-bar">
+      <span>Server: <span id="server-status">...</span></span>
+      <span>Mode: <span id="focus-mode" class="unknown">...</span></span>
+    </div>
+
+    <p class="section-title">Blocked domains (<span id="domain-count">0</span>)</p>
+    <div id="domain-list">
+      <div class="empty-list">Loading...</div>
+    </div>
+
+    <div class="add-section">
+      <div class="quick-add">
+        <button id="quick-add-btn" disabled>+ Block current tab</button>
+      </div>
+      <div class="manual-add">
+        <input id="domain-input" type="text" placeholder="domain.com" />
+        <button id="add-btn">Add</button>
+      </div>
+    </div>
+
+    <div id="status-msg"></div>
+
     <script type="module" src="dist/index.js"></script>
   </body>
 </html>

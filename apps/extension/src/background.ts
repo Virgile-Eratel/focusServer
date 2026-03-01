@@ -157,6 +157,21 @@ chrome.runtime.onStartup.addListener(() => {
   });
 });
 
+// Handler: popup notifie après POST/DELETE de domaines
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (msg.type === 'DOMAINS_UPDATED') {
+    fetchDomains(true)
+      .then((domains) => {
+        void applyBlockingRules(domains);
+        sendResponse({ ok: true });
+      })
+      .catch(() => {
+        sendResponse({ ok: false });
+      });
+    return true; // async response
+  }
+});
+
 async function initializeMode(): Promise<void> {
   try {
     const status = await fetchStatus();
