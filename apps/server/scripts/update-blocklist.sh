@@ -24,7 +24,7 @@ REAL_USER="${SUDO_USER:-$USER}"
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 INPUT_DOMAINS="$REPO_DIR/config/domains.json"
 INPUT_UNBLOCKED="$REPO_DIR/config/hosts.unblocked"
-GEN_SCRIPT="$REPO_DIR/scripts/generate-system-config.js"
+GEN_SCRIPT="$REPO_DIR/dist/scripts/generate-system-config.js"
 
 DEST_FOCUS_DIR="/usr/local/etc/focus"
 DEST_DOMAINS="$DEST_FOCUS_DIR/domains.json"
@@ -35,7 +35,8 @@ if [[ ! -f "$INPUT_DOMAINS" ]]; then
 fi
 
 if [[ ! -f "$GEN_SCRIPT" ]]; then
-  echo "❌ générateur introuvable: $GEN_SCRIPT"
+  echo "❌ Script compilé introuvable: $GEN_SCRIPT"
+  echo "   Lancez d'abord : pnpm build:server"
   exit 1
 fi
 
@@ -47,17 +48,15 @@ fi
 echo "🔄 Mise à jour blocklist (user=$REAL_USER)"
 
 # Trouver Node
-NODE_BIN="$(sudo -u "$REAL_USER" which node || true)"
-if [[ -z "$NODE_BIN" ]]; then
-  if [[ -x "/opt/homebrew/bin/node" ]]; then
-    NODE_BIN="/opt/homebrew/bin/node"
-  elif [[ -x "/usr/local/bin/node" ]]; then
-    NODE_BIN="/usr/local/bin/node"
-  else
-    echo "❌ Node.js introuvable."
-    exit 1
-  fi
-fi
+find_node() {
+    local node_bin=$(sudo -u "$REAL_USER" which node 2>/dev/null || true)
+    [[ -z "$node_bin" ]] && [[ -x "/opt/homebrew/bin/node" ]] && node_bin="/opt/homebrew/bin/node"
+    [[ -z "$node_bin" ]] && [[ -x "/usr/local/bin/node" ]] && node_bin="/usr/local/bin/node"
+    [[ -z "$node_bin" ]] && { echo "❌ Node.js introuvable"; exit 1; }
+    echo "$node_bin"
+}
+
+NODE_BIN=$(find_node)
 
 echo "   -> Node: $NODE_BIN"
 
