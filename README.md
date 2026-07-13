@@ -2,6 +2,8 @@
 
 macOS website blocker. A Node.js server enforces blocking rules via the PF firewall and `/etc/hosts`, with a Chrome extension that reloads blocked pages in the browser so that changes take effect immediately.
 
+Domains you visit for the first time are classified by a local AI model (Ollama) and blocked automatically if they fall in a forbidden category — see [Automatic classification](#automatic-classification).
+
 ## Architecture
 
 ```
@@ -18,6 +20,12 @@ packages/api-client — HTTP client for the server API
 - macOS
 - Node.js
 - pnpm (`npm install -g pnpm`)
+- [Ollama](https://ollama.com) **with a model pulled** — required, this is what classifies unknown domains:
+
+  ```bash
+  brew install ollama && ollama serve
+  ollama pull gemma3:4b
+  ```
 
 ### 1. Clone and install dependencies
 
@@ -85,14 +93,49 @@ The popup connects to the local server (`http://localhost:5959`) and shows:
 
 - the current status (blocked / unblocked, or server unreachable);
 - the next scheduled transition (“next unblock today at 18:00”), derived from `WEEKLY_SCHEDULE`;
-- one button to block the current tab's site (the hostname only: `test.com/page` is stored as `test.com`);
+- one button to block the current tab's site (the hostname only: `test.com/page` is stored as `test.com`), which turns into **"Ne plus bloquer"** on a site the AI blocked by mistake;
 - a read-only panel listing the blocklist.
+
+## Automatic classification
+
+On the first visit to an unknown domain, the extension holds the tab on a checking page and asks the server. The server fetches the page title and meta tags (the browser never loads the site) and asks the local Ollama model for a category. A verdict of `adult` or `entertainment` is added to `domains.json` — same path as a manual entry. Verdicts are cached in SQLite: a domain is classified once.
+
+| Category        | Blocked                                        |
+| --------------- | ---------------------------------------------- |
+| `adult`         | always                                         |
+| `entertainment` | outside the pause windows of `WEEKLY_SCHEDULE` |
+| `other`         | never                                          |
+
+A domain is only blocked on evidence. An unreadable page, a page whose title is just the brand name, or a domain the model cannot describe consistently yields `unknown` — **and `unknown` is not blocked**. Add such a site by hand if you want it blocked.
+
+Stopping Ollama stops the classification of new domains. It unblocks nothing: `domains.json` is still enforced through `/etc/hosts` and PF.
+
+### Configuration
+
+| Variable       | Default                  |
+| -------------- | ------------------------ |
+| `OLLAMA_URL`   | `http://localhost:11434` |
+| `OLLAMA_MODEL` | `gemma3:4b`              |
+
+Set in `.env` (or the launchd plist); defaults in `apps/server/src/utils/constants.ts`. Prompts and classification rules live in `apps/server/src/services/ollama.service.ts`.
+
+### Fixing a wrong verdict
+
+Do **not** delete the line from `domains.json`: the cached verdict survives, and the next visit re-classifies the domain identically. Requalify it as `other` — a manual entry outranks any verdict and is never re-classified.
+
+| Wrong verdict                           | Fix                                                                                        |
+| --------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `entertainment`, decided by the AI      | "Ne plus bloquer" button in the popup                                                      |
+| `adult`, or an entry you added yourself | Edit `domains.json` → `"category": "other"`, then `DELETE /api/v1/focus/verdicts/<domain>` |
+
+> The server refuses (403) to lift an `adult` block from the browser. That friction is intentional.
 
 ## Update the blocklist
 
-Edit `apps/server/config/domains.json`. That's all — no script to run.
+- Edit `apps/server/config/domains.json`
+- Adding or requalifying a domain from the Chrome extension
 
-The running server checks the file on every tick (60s by default). When it changes, it regenerates `hosts.blocked` and `pf.user.conf.template`, then reapplies the current mode. Adding a domain from the Chrome extension goes through the same path, and takes effect immediately. Removing a domain is done by editing the file — the popup does not delete.
+The running server checks the file on every tick (60s by default). When it changes, it regenerates `hosts.blocked` and `pf.user.conf.template`, then reapplies the current mode.
 
 ## Uninstall
 
