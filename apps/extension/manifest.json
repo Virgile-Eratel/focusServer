@@ -18,6 +18,7 @@
     "service_worker": "dist/background.js",
     "type": "module"
   },
-  "permissions": ["alarms", "declarativeNetRequest", "tabs"],
+  "incognito": "split",
+  "permissions": ["alarms", "declarativeNetRequest", "tabs", "webNavigation"],
   "host_permissions": ["http://localhost:5959/*"]
 }

@@ -40,6 +40,8 @@ export default defineConfig({
     rollupOptions: {
       input: {
         popup: fromHere('./popup.html'),
+        checking: fromHere('./checking.html'),
+        blocked: fromHere('./blocked.html'),
         background: fromHere('./src/background.ts'),
       },
       output: {

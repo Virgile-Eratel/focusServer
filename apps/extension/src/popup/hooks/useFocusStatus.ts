@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { FocusStatusResponse } from '@focus/shared';
 
-import { api } from '@/popup/lib/api';
+import { api } from '@/lib/api';
 
 export type StatusState = 'loading' | 'ready' | 'unreachable';
 
