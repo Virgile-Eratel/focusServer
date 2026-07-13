@@ -22,10 +22,10 @@ find_node() {
 NODE_BIN=$(find_node)
 echo "🔧 Installation pour $REAL_USER (Node: $NODE_BIN)"
 
-# 0. Preflight — vérifier que le fichier seed existe
-SEED_FILE="$SERVER_DIR/config/domains.json"
-if [[ ! -f "$SEED_FILE" ]]; then
-  echo "❌ Fichier $SEED_FILE introuvable."
+# 0. Preflight — la blocklist du projet est la source de vérité (jamais copiée ailleurs)
+DOMAINS_FILE="$SERVER_DIR/config/domains.json"
+if [[ ! -f "$DOMAINS_FILE" ]]; then
+  echo "❌ Fichier $DOMAINS_FILE introuvable."
   echo "   Copiez d'abord le template : cp config/domains.example.json config/domains.json"
   echo "   Puis éditez-le selon vos besoins."
   exit 1
@@ -38,15 +38,16 @@ sudo -u "$REAL_USER" pnpm install >/dev/null 2>&1 || sudo -u "$REAL_USER" npm in
 sudo -u "$REAL_USER" pnpm build:server || sudo -u "$REAL_USER" npm run build:server || { echo "❌ Build échoué"; exit 1; }
 
 # 2. Configs système
+# Génération initiale seulement : ensuite le serveur régénère ces fichiers
+# lui-même dès que config/domains.json change.
 echo "📂 [2/6] Fichiers config..."
-mkdir -p /usr/local/etc/focus
-install -m 644 "$SEED_FILE" /usr/local/etc/focus/domains.json
-install -m 644 "$SERVER_DIR/config/hosts.unblocked" /usr/local/etc/focus/
+mkdir -p /usr/local/etc/focusServer
+install -m 644 "$SERVER_DIR/config/hosts.unblocked" /usr/local/etc/focusServer/
 "$NODE_BIN" "$SERVER_DIR/dist/scripts/generate-system-config.js" \
-    --input /usr/local/etc/focus/domains.json --out-dir /usr/local/etc/focus
+    --input "$DOMAINS_FILE" --out-dir /usr/local/etc/focusServer
 
 # Le serveur (user-level) doit pouvoir écrire dans ce répertoire
-chown -R "$REAL_USER" /usr/local/etc/focus
+chown -R "$REAL_USER" /usr/local/etc/focusServer
 
 # 3. Script moteur
 echo "⚙️  [3/6] Script moteur..."
@@ -93,7 +94,7 @@ cat <<EOF > "$PLIST"
         <key>PATH</key><string>${NODE_DIR}:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/sbin:/usr/sbin</string>
         <key>HOME</key><string>${REAL_HOME}</string>
         <key>PORT</key><string>5959</string>
-        <key>DOMAINS_PATH</key><string>/usr/local/etc/focus/domains.json</string>
+        <key>DOMAINS_PATH</key><string>${DOMAINS_FILE}</string>
     </dict>
 </dict>
 </plist>

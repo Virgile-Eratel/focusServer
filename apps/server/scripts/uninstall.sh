@@ -84,14 +84,22 @@ echo "🧹 [3/6] Suppression des fichiers binaires..."
 rm -f /usr/local/bin/focus-apply.sh
 echo "   -> Script binaire supprimé"
 
-# Nouveau layout: tout dans /usr/local/etc/focus
+# Fichiers générés dans /usr/local/etc/focusServer.
+# La blocklist elle-même (apps/server/config/domains.json) reste intacte : elle
+# appartient au projet et n'est jamais copiée ici.
+rm -f /usr/local/etc/focusServer/hosts.blocked
+rm -f /usr/local/etc/focusServer/hosts.unblocked
+rm -f /usr/local/etc/focusServer/pf.user.conf.template
+rmdir /usr/local/etc/focusServer 2>/dev/null || true
+
+# Emplacements historiques : /usr/local/etc/focus (répertoire renommé), et avant
+# lui /usr/local/etc directement. Le domains.json y était une copie de la blocklist.
 rm -f /usr/local/etc/focus/hosts.blocked
 rm -f /usr/local/etc/focus/hosts.unblocked
 rm -f /usr/local/etc/focus/pf.user.conf.template
 rm -f /usr/local/etc/focus/domains.json
 rmdir /usr/local/etc/focus 2>/dev/null || true
 
-# Legacy cleanup (anciens emplacements)
 rm -f /usr/local/etc/hosts.blocked
 rm -f /usr/local/etc/hosts.unblocked
 rm -f /usr/local/etc/pf.user.conf.template

@@ -1,13 +1,13 @@
-import type { DomainsResponse, FocusMode, FocusStatusResponse } from '@focus/shared';
+import type { DomainsResponse, FocusStatusResponse } from '@focus/shared';
 
 const API_BASE = 'http://localhost:5959/api/v1/focus';
 const ALARM_NAME = 'focus-status-poll';
-const POLL_INTERVAL_MINUTES = 0.5; // 30 seconds
+const POLL_INTERVAL_MINUTES = 0.5; // 30 secondes
 
-const STORAGE_KEY_PREV_MODE = 'previousMode';
-const STORAGE_KEY_DOMAINS = 'cachedDomains';
+/** Identifiant de l'unique règle de blocage posée dans Chrome. */
+const BLOCKING_RULE_ID = 1;
 
-// --- API calls ---
+// --- Appels serveur (aucun cache : le serveur fait autorité) ---
 
 const FETCH_TIMEOUT_MS = 5000;
 
@@ -23,22 +23,25 @@ async function fetchStatus(): Promise<FocusStatusResponse> {
   return res.json();
 }
 
-async function fetchDomains(forceRefresh = false): Promise<string[]> {
-  if (!forceRefresh) {
-    const stored = await chrome.storage.local.get(STORAGE_KEY_DOMAINS);
-    if (stored[STORAGE_KEY_DOMAINS]) return stored[STORAGE_KEY_DOMAINS] as string[];
-  }
-
+async function fetchDomains(): Promise<string[]> {
   const res = await fetchWithTimeout(`${API_BASE}/domains`);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const data: DomainsResponse = await res.json();
-  await chrome.storage.local.set({ [STORAGE_KEY_DOMAINS]: data.domains });
   return data.domains;
 }
 
-// --- declarativeNetRequest: blocage au niveau navigateur ---
+// --- declarativeNetRequest : blocage au niveau navigateur ---
 
-const BLOCKING_RULE_ID = 1;
+/**
+ * L'état « le blocage est-il actif ? » est lu depuis les règles réellement
+ * posées dans Chrome, et non mémorisé quelque part. Le service worker MV3 est
+ * tué en permanence : toute mémoire locale serait de toute façon perdue, et un
+ * état stocké finirait par diverger de la réalité.
+ */
+async function isBlockingActive(): Promise<boolean> {
+  const rules = await chrome.declarativeNetRequest.getDynamicRules();
+  return rules.some((rule) => rule.id === BLOCKING_RULE_ID);
+}
 
 async function applyBlockingRules(domains: string[]): Promise<void> {
   await chrome.declarativeNetRequest.updateDynamicRules({
@@ -60,7 +63,7 @@ async function clearBlockingRules(): Promise<void> {
   });
 }
 
-// --- Hard refresh (force reload des tabs existants) ---
+// --- Rechargement forcé des onglets déjà ouverts ---
 
 function hardRefreshTab(tabId: number, tabUrl: string): Promise<chrome.tabs.Tab> {
   const url = new URL(tabUrl);
@@ -68,57 +71,56 @@ function hardRefreshTab(tabId: number, tabUrl: string): Promise<chrome.tabs.Tab>
   return chrome.tabs.update(tabId, { url: url.toString() });
 }
 
-// --- Domain matching ---
-
 function isUrlBlocked(url: string, blockedDomains: string[]): boolean {
   try {
-    const hostname = new URL(url).hostname;
-    return blockedDomains.includes(hostname);
+    return blockedDomains.includes(new URL(url).hostname);
   } catch {
     return false;
   }
 }
 
-// --- Core polling logic ---
-
-async function checkAndReload(): Promise<void> {
-  try {
-    const status = await fetchStatus();
-    const stored = await chrome.storage.local.get(STORAGE_KEY_PREV_MODE);
-    const previousMode: FocusMode | undefined = stored[STORAGE_KEY_PREV_MODE];
-
-    const isTransitionToBlocked = previousMode === 'unblocked' && status.mode === 'blocked';
-
-    await chrome.storage.local.set({ [STORAGE_KEY_PREV_MODE]: status.mode });
-
-    // Sync des règles declarativeNetRequest avec le mode courant
-    if (status.mode === 'blocked') {
-      const domains = await fetchDomains(isTransitionToBlocked);
-      await applyBlockingRules(domains);
-
-      // Sur transition → blocked : forcer le reload des tabs déjà ouvertes
-      if (isTransitionToBlocked) {
-        const allTabs = await chrome.tabs.query({});
-        for (const tab of allTabs) {
-          if (tab.id && tab.url && isUrlBlocked(tab.url, domains)) {
-            await hardRefreshTab(tab.id, tab.url);
-          }
-        }
-      }
-    } else {
-      await clearBlockingRules();
+async function hardRefreshBlockedTabs(domains: string[]): Promise<void> {
+  const tabs = await chrome.tabs.query({});
+  for (const tab of tabs) {
+    if (tab.id && tab.url && isUrlBlocked(tab.url, domains)) {
+      await hardRefreshTab(tab.id, tab.url);
     }
-  } catch (error) {
-    console.warn('[FocusServer] Poll error:', error);
   }
 }
 
-// --- Tab switch: reload if user comes back to a blocked site while blocked ---
+// --- Boucle de synchronisation ---
 
+/**
+ * Aligne les règles du navigateur sur le mode du serveur.
+ * Le passage unblocked → blocked se déduit de l'absence de règles : on force
+ * alors le rechargement des onglets déjà ouverts, qui sinon resteraient
+ * affichés depuis le cache du navigateur.
+ */
+async function syncWithServer(): Promise<void> {
+  try {
+    const status = await fetchStatus();
+
+    if (status.mode !== 'blocked') {
+      await clearBlockingRules();
+      return;
+    }
+
+    const wasBlocking = await isBlockingActive();
+    const domains = await fetchDomains();
+    await applyBlockingRules(domains);
+
+    if (!wasBlocking) {
+      await hardRefreshBlockedTabs(domains);
+    }
+  } catch (error) {
+    console.warn('[FocusServer] Sync error:', error);
+  }
+}
+
+/** Retour sur un onglet bloqué pendant le blocage → recharger (il peut venir du cache). */
 async function onTabActivated(activeInfo: chrome.tabs.TabActiveInfo): Promise<void> {
   try {
-    const stored = await chrome.storage.local.get(STORAGE_KEY_PREV_MODE);
-    if (stored[STORAGE_KEY_PREV_MODE] !== 'blocked') return;
+    if (!(await isBlockingActive())) return;
 
     const tab = await chrome.tabs.get(activeInfo.tabId);
     if (!tab.url) return;
@@ -132,58 +134,34 @@ async function onTabActivated(activeInfo: chrome.tabs.TabActiveInfo): Promise<vo
   }
 }
 
+// --- Événements ---
+
 chrome.tabs.onActivated.addListener((activeInfo) => {
   void onTabActivated(activeInfo);
 });
 
-// --- Alarm setup ---
-
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === ALARM_NAME) {
-    void checkAndReload();
+    void syncWithServer();
   }
 });
 
 chrome.runtime.onInstalled.addListener(() => {
-  void chrome.alarms.create(ALARM_NAME, {
-    periodInMinutes: POLL_INTERVAL_MINUTES,
-  });
-  void initializeMode();
+  void chrome.alarms.create(ALARM_NAME, { periodInMinutes: POLL_INTERVAL_MINUTES });
+  void syncWithServer();
 });
 
 chrome.runtime.onStartup.addListener(() => {
-  void chrome.alarms.create(ALARM_NAME, {
-    periodInMinutes: POLL_INTERVAL_MINUTES,
-  });
+  void chrome.alarms.create(ALARM_NAME, { periodInMinutes: POLL_INTERVAL_MINUTES });
+  void syncWithServer();
 });
 
-// Handler: popup notifie après POST/DELETE de domaines
+// Le popup notifie après un ajout/suppression de domaine.
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg.type === 'DOMAINS_UPDATED') {
-    fetchDomains(true)
-      .then((domains) => {
-        void applyBlockingRules(domains);
-        sendResponse({ ok: true });
-      })
-      .catch(() => {
-        sendResponse({ ok: false });
-      });
-    return true; // async response
+    syncWithServer()
+      .then(() => sendResponse({ ok: true }))
+      .catch(() => sendResponse({ ok: false }));
+    return true; // réponse asynchrone
   }
 });
-
-async function initializeMode(): Promise<void> {
-  try {
-    const status = await fetchStatus();
-    await chrome.storage.local.set({ [STORAGE_KEY_PREV_MODE]: status.mode });
-
-    if (status.mode === 'blocked') {
-      const domains = await fetchDomains(true);
-      await applyBlockingRules(domains);
-    } else {
-      await clearBlockingRules();
-    }
-  } catch {
-    // Server not available yet — first successful poll will seed the mode
-  }
-}

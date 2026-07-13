@@ -18,13 +18,6 @@
     "service_worker": "dist/background.js",
     "type": "module"
   },
-  "permissions": [
-    "alarms",
-    "declarativeNetRequest",
-    "storage",
-    "tabs"
-  ],
-  "host_permissions": [
-    "http://localhost:5959/*"
-  ]
+  "permissions": ["alarms", "declarativeNetRequest", "tabs"],
+  "host_permissions": ["http://localhost:5959/*"]
 }

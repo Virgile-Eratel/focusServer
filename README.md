@@ -53,13 +53,14 @@ This installs the launchd daemon, firewall rules and sudoers configuration.
 
 **Generated files:**
 
-| Path                                         | Description                  |
-| -------------------------------------------- | ---------------------------- |
-| `/usr/local/etc/focus/hosts.blocked`         | Hosts file in blocked mode   |
-| `/usr/local/etc/focus/hosts.unblocked`       | Hosts file in unblocked mode |
-| `/usr/local/etc/focus/pf.user.conf.template` | PF config template           |
-| `/usr/local/etc/focus/domains.json`          | Domain list copy             |
-| `/usr/local/bin/focus-apply.sh`              | Mode apply script            |
+| Path                                               | Description                  |
+| -------------------------------------------------- | ---------------------------- |
+| `/usr/local/etc/focusServer/hosts.blocked`         | Hosts file in blocked mode   |
+| `/usr/local/etc/focusServer/hosts.unblocked`       | Hosts file in unblocked mode |
+| `/usr/local/etc/focusServer/pf.user.conf.template` | PF config template           |
+| `/usr/local/bin/focus-apply.sh`                    | Mode apply script            |
+
+`hosts.blocked` and `pf.user.conf.template` are **derived** from `apps/server/config/domains.json`, which stays the single source of truth. The server regenerates them whenever the JSON changes; nothing is ever copied out of the project.
 
 ## Chrome Extension Installation
 
@@ -82,10 +83,9 @@ The extension connects to the local server (`http://localhost:5959`) to display 
 
 ## Update the blocklist
 
-```bash
-# Edit apps/server/config/domains.json then:
-sudo apps/server/scripts/update-blocklist.sh
-```
+Edit `apps/server/config/domains.json`. That's all — no script to run.
+
+The running server checks the file on every tick (60s by default). When it changes, it regenerates `hosts.blocked` and `pf.user.conf.template`, then reapplies the current mode. Adding or removing a domain from the Chrome extension goes through the same path, and takes effect immediately.
 
 ## Uninstall
 

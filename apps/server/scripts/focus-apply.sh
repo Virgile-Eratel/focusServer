@@ -9,7 +9,7 @@ set -euo pipefail
 LOG="/var/log/focus-apply.log"
 
 # Chemins des hosts
-FOCUS_DIR="/usr/local/etc/focus"
+FOCUS_DIR="/usr/local/etc/focusServer"
 BLOCKED="$FOCUS_DIR/hosts.blocked"
 UNBLOCKED="$FOCUS_DIR/hosts.unblocked"
 TARGET="/etc/hosts"

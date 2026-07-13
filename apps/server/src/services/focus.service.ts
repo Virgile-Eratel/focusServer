@@ -24,16 +24,20 @@ export function calculateTargetMode(): ApplicableFocusMode {
  * Applique le mode cible. Si force=true, contourne le guard
  * targetMode === currentMode — utilisé après modification de la
  * liste de domaines (les fichiers système ont changé).
+ *
+ * Retourne `true` si la machine reflète bien `targetMode` en sortie, `false`
+ * si l'application a été abandonnée (déjà en cours) ou a échoué. L'appelant
+ * doit alors considérer que /etc n'est PAS à jour et retenter.
  */
 export async function applyMode(
   targetMode: ApplicableFocusMode,
   { force = false, reason }: { force?: boolean; reason?: string } = {},
-): Promise<void> {
-  if (!force && targetMode === currentMode) return;
+): Promise<boolean> {
+  if (!force && targetMode === currentMode) return true;
 
   if (isApplying) {
     log.warn({ targetMode, force }, 'applyMode skipped — already applying');
-    return;
+    return false;
   }
 
   isApplying = true;
@@ -43,11 +47,13 @@ export async function applyMode(
     await apply(targetMode);
     currentMode = targetMode;
     log.info({ mode: targetMode }, 'Apply completed');
+    return true;
   } catch (error) {
-    // Non-fatal : le domaine est persisté dans domains.json et sera
-    // appliqué au prochain tick() (≤ 60s).
+    // Non-fatal : domains.json et les fichiers système sont déjà à jour.
+    // Le prochain tick() retentera l'application (≤ 60s).
     const e = error as Error;
     log.error({ err: e }, 'Apply failed');
+    return false;
   } finally {
     isApplying = false;
   }

@@ -1,74 +1,126 @@
-import { readFileSync, writeFileSync } from 'fs';
-import path from 'path';
-import { execFile } from 'child_process';
-import { promisify } from 'util';
+import { readFileSync } from 'fs';
+import { createHash } from 'crypto';
 import type { DomainEntryResponse } from '@focus/shared';
+import type { DomainEntry, DomainsConfig } from '../types/domains';
 import { normalizeHostname } from '../utils/hostname';
-import { applyMode, calculateTargetMode } from './focus.service';
+import { writeFileAtomic } from '../utils/atomicWrite';
+import { DEFAULT_DOMAINS_PATH, DEFAULT_SYSTEM_DIR } from '../utils/constants';
 import { createChildLogger } from '../utils/logger';
+import { assertSupportedVersion, expandDomainEntries, generateSystemFiles } from './systemConfig.service';
+import { applyMode, calculateTargetMode } from './focus.service';
 
 const log = createChildLogger('domain');
 
-const execFileAsync = promisify(execFile);
+/**
+ * `config/domains.json` (dans le projet) est l'unique source de vérité.
+ * Il n'est jamais copié ailleurs : les fichiers système en sont dérivés.
+ *
+ * Aucun cache mémoire — le fichier est relu à chaque lecture. Il fait quelques
+ * kilo-octets et n'est lu qu'au tick (60s) ou sur requête de l'extension : le
+ * coût est négligeable, et une donnée périmée devient impossible.
+ */
+const DOMAINS_PATH = process.env.DOMAINS_PATH || DEFAULT_DOMAINS_PATH;
 
-// --- Types ---
+/** Répertoire des fichiers générés, lus ensuite par focus-apply.sh. */
+const SYSTEM_DIR = process.env.FOCUS_SYSTEM_DIR || DEFAULT_SYSTEM_DIR;
 
-export type DomainEntry = {
-  domain: string;
-  aliases?: string[];
-  includeWww?: boolean;
-  includeMobile?: boolean;
-  tags?: string[];
-};
+// --- Lecture ---
 
-export type DomainsConfig = {
-  version: number;
-  defaults: {
-    includeWww: boolean;
-    includeMobile: boolean;
-  };
-  entries: DomainEntry[];
-};
+function parseConfig(raw: string): DomainsConfig {
+  const config = JSON.parse(raw) as DomainsConfig;
+  assertSupportedVersion(config);
+  return config;
+}
 
-// --- Paths ---
+function readConfig(): { raw: string; config: DomainsConfig } {
+  const raw = readFileSync(DOMAINS_PATH, 'utf-8');
+  return { raw, config: parseConfig(raw) };
+}
 
-/** Chemin runtime des domaines (installé par install.sh). */
-const DOMAINS_PATH = process.env.DOMAINS_PATH || '/usr/local/etc/focus/domains.json';
+/** Tous les hostnames bloqués, alias et variantes www/m comprises. */
+export function getExpandedDomains(): string[] {
+  return expandDomainEntries(readConfig().config);
+}
 
-/** Script compilé de régénération (depuis dist/). */
-const GEN_SCRIPT_PATH = path.resolve(__dirname, '../scripts/generate-system-config.js');
+/** Les entrées telles qu'écrites dans le fichier (sans expansion). */
+export function getDomainEntries(): DomainEntryResponse[] {
+  return readConfig().config.entries.map((entry) => ({
+    domain: entry.domain,
+    tags: entry.tags ?? [],
+  }));
+}
 
-/** Répertoire de sortie pour les fichiers système générés. */
-const SYSTEM_DIR = path.dirname(DOMAINS_PATH);
-
-// --- Dual cache ---
+// --- Synchronisation domains.json → fichiers système ---
 
 /**
- * Deux niveaux de cache :
- * - cachedConfig: DomainsConfig | null — config brute (pour getDomainEntries)
- * - cachedDomains: string[] | null — domaines expansés (pour getExpandedDomains)
- *
- * Lazy-init : chaque cache est peuplé à la première lecture, puis invalidé
- * après chaque écriture (addDomain / removeDomain).
+ * Empreinte du contenu déjà propagé vers les fichiers système.
+ * `null` = rien n'a encore été synchronisé (démarrage, ou échec précédent
+ * qu'il faut retenter).
  */
-let cachedConfig: DomainsConfig | null = null;
-let cachedDomains: string[] | null = null;
+let lastSyncedHash: string | null = null;
 
-function loadConfig(): DomainsConfig {
-  if (!cachedConfig) {
-    const raw = readFileSync(DOMAINS_PATH, 'utf-8');
-    cachedConfig = JSON.parse(raw) as DomainsConfig;
+function hashOf(raw: string): string {
+  return createHash('sha256').update(raw).digest('hex');
+}
+
+/**
+ * Régénère hosts.blocked + pf.user.conf.template, puis applique si le blocage
+ * est actif. Le `force` est indispensable : le mode n'a pas changé, ce sont les
+ * fichiers qui ont changé — sans lui, focus-apply.sh ne serait pas rappelé.
+ */
+async function regenerate(raw: string, reason: string): Promise<void> {
+  const config = parseConfig(raw);
+
+  generateSystemFiles(config, SYSTEM_DIR);
+  log.info({ reason, entries: config.entries.length }, 'System files regenerated');
+
+  // En mode unblocked, les fichiers générés ne sont pas encore utilisés :
+  // rien à appliquer, la synchro est complète.
+  if (calculateTargetMode() === 'unblocked') {
+    lastSyncedHash = hashOf(raw);
+    return;
   }
-  return cachedConfig;
+
+  // L'empreinte n'est enregistrée que si /etc reflète vraiment le fichier.
+  // Sinon (apply échoué ou abandonné car déjà en cours), on laisse l'empreinte
+  // en l'état pour que le prochain tick retente — sans quoi une application
+  // manquée resterait invisible jusqu'au prochain changement de mode.
+  const applied = await applyMode('blocked', { force: true, reason });
+  if (applied) {
+    lastSyncedHash = hashOf(raw);
+  } else {
+    log.warn({ reason }, 'Apply did not complete — will retry on next tick');
+  }
 }
 
-/** Invalide les deux caches — force une relecture au prochain appel. */
-export function invalidateDomainCache(): void {
-  cachedConfig = null;
-  cachedDomains = null;
+/**
+ * Appelé à chaque tick. Détecte toute modification de domains.json — y compris
+ * une édition manuelle à l'éditeur de texte — et la propage vers la machine.
+ * Au démarrage l'empreinte est inconnue, donc une synchro a toujours lieu : les
+ * fichiers système reflètent forcément le JSON dès que le serveur tourne.
+ */
+export async function syncSystemFilesIfChanged(): Promise<void> {
+  let raw: string;
+  try {
+    raw = readFileSync(DOMAINS_PATH, 'utf-8');
+  } catch (error) {
+    log.error({ err: error as Error, path: DOMAINS_PATH }, 'Cannot read domains.json');
+    return;
+  }
+
+  if (hashOf(raw) === lastSyncedHash) return;
+
+  const reason = lastSyncedHash === null ? 'startup' : 'domains.json changed';
+  try {
+    await regenerate(raw, reason);
+  } catch (error) {
+    // Non fatal (JSON invalide, écriture impossible…). L'empreinte n'ayant pas
+    // été mise à jour, le prochain tick retentera.
+    log.error({ err: error as Error }, 'Sync failed — will retry on next tick');
+  }
 }
 
-// --- Write lock ---
+// --- Écriture (verrou : une seule modification à la fois) ---
 
 const WRITE_LOCK_TIMEOUT_MS = 30_000;
 
@@ -94,170 +146,74 @@ async function withWriteLock<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
-// --- Regeneration ---
-
-async function regenerateSystemConfig(): Promise<void> {
-  await execFileAsync('node', [GEN_SCRIPT_PATH, '--input', DOMAINS_PATH, '--out-dir', SYSTEM_DIR]);
+function httpError(message: string, statusCode: number): Error & { statusCode: number } {
+  const err = new Error(message) as Error & { statusCode: number };
+  err.statusCode = statusCode;
+  return err;
 }
 
-// --- Public API ---
-
 /**
- * Pure function: expands a DomainsConfig into a flat deduplicated list of hostnames.
- * Mirrors the expansion logic from generate-system-config.
+ * Modifie domains.json puis propage vers la machine.
+ * Si la génération échoue, le fichier est restauré et la prochaine synchro est
+ * forcée — les fichiers système ont pu rester à moitié à jour.
  */
-export function expandDomainEntries(config: DomainsConfig): string[] {
-  const domains = new Set<string>();
+async function updateConfig(
+  reason: string,
+  mutate: (config: DomainsConfig) => void,
+): Promise<{ expandedDomains: string[] }> {
+  // Relecture disque à l'intérieur du verrou : le fichier a pu changer entre-temps.
+  const { raw: previousRaw, config } = readConfig();
 
-  for (const entry of config.entries) {
-    domains.add(entry.domain);
+  mutate(config);
 
-    const includeWww = entry.includeWww ?? config.defaults.includeWww;
-    if (includeWww) domains.add(`www.${entry.domain}`);
+  const nextRaw = JSON.stringify(config, null, 2) + '\n';
+  writeFileAtomic(DOMAINS_PATH, nextRaw);
 
-    const includeMobile = entry.includeMobile ?? config.defaults.includeMobile;
-    if (includeMobile) domains.add(`m.${entry.domain}`);
-
-    if (entry.aliases) {
-      for (const alias of entry.aliases) {
-        domains.add(alias);
-        if (includeWww) domains.add(`www.${alias}`);
-      }
-    }
+  try {
+    await regenerate(nextRaw, reason);
+  } catch (error) {
+    writeFileAtomic(DOMAINS_PATH, previousRaw);
+    lastSyncedHash = null; // force une resynchro complète au prochain tick
+    log.error({ err: error as Error }, 'Failed to regenerate system config, rolled back');
+    throw new Error('Failed to regenerate system config');
   }
 
-  return Array.from(domains);
+  return { expandedDomains: expandDomainEntries(config) };
 }
 
-/** Cached wrapper — reads domains.json once, then returns from cache. */
-export function getExpandedDomains(): string[] {
-  if (cachedDomains) return cachedDomains;
-  cachedDomains = expandDomainEntries(loadConfig());
-  return cachedDomains;
-}
-
-/** Retourne les entrées brutes (non expansées) depuis le cache. */
-export function getDomainEntries(): DomainEntryResponse[] {
-  const config = loadConfig();
-  return config.entries.map((e) => ({
-    domain: e.domain,
-    tags: e.tags ?? [],
-  }));
-}
-
-/**
- * Ajoute un domaine.
- * 1. Valide via normalizeHostname()
- * 2. Vérifie qu'il n'existe pas déjà (409)
- * 3. Écrit le JSON modifié dans DOMAINS_PATH
- * 4. Régénère hosts.blocked + pf.user.conf.template via le script TS compilé
- * 5. Invalide le cache mémoire
- * 6. Si mode courant = blocked → applyMode(target, { force: true })
- */
 export async function addDomain(
   domain: string,
   tags?: string[],
 ): Promise<{ entry: DomainEntryResponse; expandedDomains: string[] }> {
   const normalized = normalizeHostname(domain);
-  if (!normalized) {
-    const err = new Error('Invalid domain format') as Error & { statusCode: number };
-    err.statusCode = 400;
-    throw err;
-  }
+  if (!normalized) throw httpError('Invalid domain format', 400);
 
   return withWriteLock(async () => {
-    // Read fresh from disk inside the lock
-    const raw = readFileSync(DOMAINS_PATH, 'utf-8');
-    const config = JSON.parse(raw) as DomainsConfig;
-
-    const existing = config.entries.find((e) => e.domain === normalized);
-    if (existing) {
-      const err = new Error('Domain already exists') as Error & { statusCode: number };
-      err.statusCode = 409;
-      throw err;
-    }
-
     const newEntry: DomainEntry = { domain: normalized };
     if (tags && tags.length > 0) newEntry.tags = tags;
-    config.entries.push(newEntry);
 
-    const previousRaw = raw;
-
-    // Write
-    writeFileSync(DOMAINS_PATH, JSON.stringify(config, null, 2) + '\n', 'utf-8');
-
-    // Regenerate system config
-    try {
-      await regenerateSystemConfig();
-    } catch (error) {
-      // Rollback
-      writeFileSync(DOMAINS_PATH, previousRaw, 'utf-8');
-      log.error({ err: error as Error }, 'generate-system-config failed, rolling back');
-      throw new Error('Failed to regenerate system config');
-    }
-
-    // Invalidate cache
-    invalidateDomainCache();
-
-    // Force-apply if currently blocked
-    const target = calculateTargetMode();
-    if (target === 'blocked') {
-      await applyMode(target, { force: true, reason: 'domain list changed' });
-    }
-
-    const expandedDomains = getExpandedDomains();
-    const entry: DomainEntryResponse = { domain: normalized, tags: newEntry.tags ?? [] };
+    const { expandedDomains } = await updateConfig('domain added', (config) => {
+      if (config.entries.some((entry) => entry.domain === normalized)) {
+        throw httpError('Domain already exists', 409);
+      }
+      config.entries.push(newEntry);
+    });
 
     log.info({ domain: normalized }, 'Domain added');
-    return { entry, expandedDomains };
+    return { entry: { domain: normalized, tags: newEntry.tags ?? [] }, expandedDomains };
   });
 }
 
-/**
- * Supprime un domaine.
- * Même pipeline que addDomain (write → regenerate → invalidate → applyMode force).
- */
 export async function removeDomain(domain: string): Promise<{ expandedDomains: string[] }> {
   const normalized = normalizeHostname(domain);
-  if (!normalized) {
-    const err = new Error('Invalid domain format') as Error & { statusCode: number };
-    err.statusCode = 400;
-    throw err;
-  }
+  if (!normalized) throw httpError('Invalid domain format', 400);
 
   return withWriteLock(async () => {
-    const raw = readFileSync(DOMAINS_PATH, 'utf-8');
-    const config = JSON.parse(raw) as DomainsConfig;
-
-    const idx = config.entries.findIndex((e) => e.domain === normalized);
-    if (idx === -1) {
-      const err = new Error('Domain not found') as Error & { statusCode: number };
-      err.statusCode = 404;
-      throw err;
-    }
-
-    config.entries.splice(idx, 1);
-
-    const previousRaw = raw;
-
-    writeFileSync(DOMAINS_PATH, JSON.stringify(config, null, 2) + '\n', 'utf-8');
-
-    try {
-      await regenerateSystemConfig();
-    } catch (error) {
-      writeFileSync(DOMAINS_PATH, previousRaw, 'utf-8');
-      log.error({ err: error as Error }, 'generate-system-config failed, rolling back');
-      throw new Error('Failed to regenerate system config');
-    }
-
-    invalidateDomainCache();
-
-    const target = calculateTargetMode();
-    if (target === 'blocked') {
-      await applyMode(target, { force: true, reason: 'domain list changed' });
-    }
-
-    const expandedDomains = getExpandedDomains();
+    const { expandedDomains } = await updateConfig('domain removed', (config) => {
+      const index = config.entries.findIndex((entry) => entry.domain === normalized);
+      if (index === -1) throw httpError('Domain not found', 404);
+      config.entries.splice(index, 1);
+    });
 
     log.info({ domain: normalized }, 'Domain removed');
     return { expandedDomains };

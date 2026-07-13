@@ -1,69 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { expandDomainEntries, type DomainsConfig } from '../../../src/services/domain.service';
+import type { DomainsConfig } from '../../../src/types/domains';
 
-const defaults = { includeWww: true, includeMobile: false };
-
-function makeConfig(
-  entries: DomainsConfig['entries'],
-  overrideDefaults?: Partial<DomainsConfig['defaults']>,
-): DomainsConfig {
-  return { version: 1, defaults: { ...defaults, ...overrideDefaults }, entries };
-}
-
-describe('expandDomainEntries', () => {
-  it('expands a single domain with www (default)', () => {
-    const result = expandDomainEntries(makeConfig([{ domain: 'example.com' }]));
-    expect(result).toEqual(['example.com', 'www.example.com']);
-  });
-
-  it('skips www when entry overrides includeWww: false', () => {
-    const result = expandDomainEntries(makeConfig([{ domain: 'x.com', includeWww: false }]));
-    expect(result).toEqual(['x.com']);
-  });
-
-  it('includes mobile variant when entry opts in', () => {
-    const result = expandDomainEntries(makeConfig([{ domain: 'youtube.com', includeMobile: true }]));
-    expect(result).toContain('m.youtube.com');
-  });
-
-  it('includes mobile for all entries when default is true', () => {
-    const result = expandDomainEntries(makeConfig([{ domain: 'reddit.com' }], { includeMobile: true }));
-    expect(result).toEqual(['reddit.com', 'www.reddit.com', 'm.reddit.com']);
-  });
-
-  it('expands aliases with www', () => {
-    const result = expandDomainEntries(makeConfig([{ domain: 'youtube.com', aliases: ['youtu.be'] }]));
-    expect(result).toContain('youtu.be');
-    expect(result).toContain('www.youtu.be');
-  });
-
-  it('skips www on aliases when includeWww is false', () => {
-    const result = expandDomainEntries(makeConfig([{ domain: 'yt.com', includeWww: false, aliases: ['youtu.be'] }]));
-    expect(result).toContain('youtu.be');
-    expect(result).not.toContain('www.youtu.be');
-  });
-
-  it('deduplicates when alias matches domain', () => {
-    const result = expandDomainEntries(makeConfig([{ domain: 'example.com', aliases: ['example.com'] }]));
-    const count = result.filter((d) => d === 'example.com').length;
-    expect(count).toBe(1);
-  });
-
-  it('returns empty array for empty entries', () => {
-    const result = expandDomainEntries(makeConfig([]));
-    expect(result).toEqual([]);
-  });
-
-  it('handles multiple entries correctly', () => {
-    const result = expandDomainEntries(makeConfig([{ domain: 'facebook.com' }, { domain: 'twitter.com' }]));
-    expect(result).toEqual(['facebook.com', 'www.facebook.com', 'twitter.com', 'www.twitter.com']);
-  });
-});
-
-describe('addDomain / removeDomain / getDomainEntries', () => {
+describe('domain.service', () => {
   let domainService: typeof import('../../../src/services/domain.service');
-  let mockFs: { readFileSync: ReturnType<typeof vi.fn>; writeFileSync: ReturnType<typeof vi.fn> };
-  let mockExecFileAsync: ReturnType<typeof vi.fn>;
+
+  let mockReadFileSync: ReturnType<typeof vi.fn>;
+  let mockWriteFileAtomic: ReturnType<typeof vi.fn>;
+  let mockGenerateSystemFiles: ReturnType<typeof vi.fn>;
   let mockApplyMode: ReturnType<typeof vi.fn>;
   let mockCalculateTargetMode: ReturnType<typeof vi.fn>;
 
@@ -76,30 +19,37 @@ describe('addDomain / removeDomain / getDomainEntries', () => {
     ],
   };
 
+  /** Contenu courant de domains.json vu par le service. */
+  function setFileContent(config: DomainsConfig): string {
+    const raw = JSON.stringify(config, null, 2) + '\n';
+    mockReadFileSync.mockReturnValue(raw);
+    return raw;
+  }
+
   beforeEach(async () => {
     vi.resetModules();
 
-    mockFs = {
-      readFileSync: vi.fn().mockReturnValue(JSON.stringify(sampleConfig)),
-      writeFileSync: vi.fn(),
-    };
-
-    mockExecFileAsync = vi.fn().mockResolvedValue({ stdout: '', stderr: '' });
-    mockApplyMode = vi.fn().mockResolvedValue(undefined);
+    mockReadFileSync = vi.fn();
+    mockWriteFileAtomic = vi.fn();
+    mockGenerateSystemFiles = vi.fn();
+    mockApplyMode = vi.fn().mockResolvedValue(true);
     mockCalculateTargetMode = vi.fn().mockReturnValue('blocked');
 
-    vi.doMock('fs', () => ({
-      readFileSync: mockFs.readFileSync,
-      writeFileSync: mockFs.writeFileSync,
+    setFileContent(sampleConfig);
+
+    vi.doMock('fs', async (importActual) => {
+      const actual = await importActual<typeof import('fs')>();
+      return { ...actual, readFileSync: mockReadFileSync };
+    });
+
+    vi.doMock('../../../src/utils/atomicWrite', () => ({
+      writeFileAtomic: mockWriteFileAtomic,
     }));
 
-    vi.doMock('child_process', () => ({
-      execFile: vi.fn(),
-    }));
-
-    vi.doMock('util', () => ({
-      promisify: () => mockExecFileAsync,
-    }));
+    vi.doMock('../../../src/services/systemConfig.service', async (importActual) => {
+      const actual = await importActual<typeof import('../../../src/services/systemConfig.service')>();
+      return { ...actual, generateSystemFiles: mockGenerateSystemFiles };
+    });
 
     vi.doMock('../../../src/services/focus.service', () => ({
       applyMode: mockApplyMode,
@@ -107,12 +57,7 @@ describe('addDomain / removeDomain / getDomainEntries', () => {
     }));
 
     vi.doMock('../../../src/utils/logger', () => ({
-      createChildLogger: () => ({
-        info: vi.fn(),
-        warn: vi.fn(),
-        error: vi.fn(),
-        debug: vi.fn(),
-      }),
+      createChildLogger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }),
     }));
 
     domainService = await import('../../../src/services/domain.service');
@@ -122,110 +67,180 @@ describe('addDomain / removeDomain / getDomainEntries', () => {
     vi.restoreAllMocks();
   });
 
-  describe('getDomainEntries', () => {
-    it('returns entries from config with tags', () => {
-      const entries = domainService.getDomainEntries();
-      expect(entries).toEqual([
-        { domain: 'facebook.com', tags: ['social'] },
-        { domain: 'youtube.com', tags: ['video'] },
-      ]);
+  describe('reads (no cache)', () => {
+    it('re-reads domains.json on every call', () => {
+      domainService.getExpandedDomains();
+      domainService.getExpandedDomains();
+      domainService.getDomainEntries();
+      expect(mockReadFileSync).toHaveBeenCalledTimes(3);
     });
 
-    it('returns empty tags array when entry has no tags', () => {
-      const configNoTags = { ...sampleConfig, entries: [{ domain: 'x.com' }] };
-      mockFs.readFileSync.mockReturnValue(JSON.stringify(configNoTags));
-      domainService.invalidateDomainCache();
-      const entries = domainService.getDomainEntries();
-      expect(entries[0].tags).toEqual([]);
+    it('picks up an external edit immediately', () => {
+      expect(domainService.getDomainEntries()).toHaveLength(2);
+
+      setFileContent({ ...sampleConfig, entries: [{ domain: 'reddit.com' }] });
+
+      expect(domainService.getDomainEntries()).toEqual([{ domain: 'reddit.com', tags: [] }]);
+    });
+
+    it('expands entries into hostnames', () => {
+      expect(domainService.getExpandedDomains()).toContain('www.facebook.com');
+    });
+
+    it('returns an empty tags array when the entry has none', () => {
+      setFileContent({ ...sampleConfig, entries: [{ domain: 'x.com' }] });
+      expect(domainService.getDomainEntries()[0].tags).toEqual([]);
+    });
+  });
+
+  describe('syncSystemFilesIfChanged', () => {
+    it('regenerates on first run (system files may not match the file yet)', async () => {
+      await domainService.syncSystemFilesIfChanged();
+      expect(mockGenerateSystemFiles).toHaveBeenCalledTimes(1);
+      expect(mockApplyMode).toHaveBeenCalledWith('blocked', { force: true, reason: 'startup' });
+    });
+
+    it('does nothing when the file is unchanged', async () => {
+      await domainService.syncSystemFilesIfChanged();
+      await domainService.syncSystemFilesIfChanged();
+      expect(mockGenerateSystemFiles).toHaveBeenCalledTimes(1);
+    });
+
+    it('regenerates and re-applies when the file changed', async () => {
+      await domainService.syncSystemFilesIfChanged();
+
+      setFileContent({ ...sampleConfig, entries: [{ domain: 'reddit.com' }] });
+      await domainService.syncSystemFilesIfChanged();
+
+      expect(mockGenerateSystemFiles).toHaveBeenCalledTimes(2);
+      expect(mockApplyMode).toHaveBeenLastCalledWith('blocked', {
+        force: true,
+        reason: 'domains.json changed',
+      });
+    });
+
+    it('regenerates but does not apply while unblocked', async () => {
+      mockCalculateTargetMode.mockReturnValue('unblocked');
+      await domainService.syncSystemFilesIfChanged();
+      expect(mockGenerateSystemFiles).toHaveBeenCalledTimes(1);
+      expect(mockApplyMode).not.toHaveBeenCalled();
+    });
+
+    it('never throws when domains.json is unreadable', async () => {
+      mockReadFileSync.mockImplementation(() => {
+        throw new Error('ENOENT');
+      });
+      await expect(domainService.syncSystemFilesIfChanged()).resolves.toBeUndefined();
+      expect(mockGenerateSystemFiles).not.toHaveBeenCalled();
+    });
+
+    it('never throws on invalid JSON, and retries on the next tick', async () => {
+      mockReadFileSync.mockReturnValue('{ not json');
+      await expect(domainService.syncSystemFilesIfChanged()).resolves.toBeUndefined();
+
+      setFileContent(sampleConfig);
+      await domainService.syncSystemFilesIfChanged();
+      expect(mockGenerateSystemFiles).toHaveBeenCalledTimes(1);
+    });
+
+    it('retries while the apply does not go through (/etc is not in sync yet)', async () => {
+      mockApplyMode.mockResolvedValue(false);
+
+      await domainService.syncSystemFilesIfChanged();
+      await domainService.syncSystemFilesIfChanged();
+
+      // Contenu inchangé, mais la machine n'a pas suivi : on ne doit pas
+      // considérer la synchro comme faite.
+      expect(mockGenerateSystemFiles).toHaveBeenCalledTimes(2);
+      expect(mockApplyMode).toHaveBeenCalledTimes(2);
+    });
+
+    it('stops retrying once the apply succeeds', async () => {
+      mockApplyMode.mockResolvedValueOnce(false).mockResolvedValue(true);
+
+      await domainService.syncSystemFilesIfChanged();
+      await domainService.syncSystemFilesIfChanged();
+      await domainService.syncSystemFilesIfChanged();
+
+      expect(mockGenerateSystemFiles).toHaveBeenCalledTimes(2);
     });
   });
 
   describe('addDomain', () => {
-    it('adds a valid domain and writes to file', async () => {
+    it('writes the file, regenerates and force-applies', async () => {
       const result = await domainService.addDomain('reddit.com', ['social']);
-      expect(result.entry.domain).toBe('reddit.com');
-      expect(result.entry.tags).toEqual(['social']);
-      expect(mockFs.writeFileSync).toHaveBeenCalled();
-      expect(mockExecFileAsync).toHaveBeenCalled();
+
+      expect(result.entry).toEqual({ domain: 'reddit.com', tags: ['social'] });
+      expect(result.expandedDomains).toContain('reddit.com');
+
+      const written = JSON.parse(mockWriteFileAtomic.mock.calls[0][1]) as DomainsConfig;
+      expect(written.entries.map((e) => e.domain)).toContain('reddit.com');
+
+      expect(mockGenerateSystemFiles).toHaveBeenCalledTimes(1);
+      expect(mockApplyMode).toHaveBeenCalledWith('blocked', { force: true, reason: 'domain added' });
     });
 
-    it('throws 400 for invalid domain', async () => {
-      await expect(domainService.addDomain('not valid!')).rejects.toThrow('Invalid domain format');
-    });
-
-    it('throws 409 for duplicate domain', async () => {
-      try {
-        await domainService.addDomain('facebook.com');
-        expect.unreachable('Should have thrown');
-      } catch (err) {
-        expect((err as any).statusCode).toBe(409);
-      }
-    });
-
-    it('calls applyMode with force when mode is blocked', async () => {
-      mockCalculateTargetMode.mockReturnValue('blocked');
-      await domainService.addDomain('reddit.com');
-      expect(mockApplyMode).toHaveBeenCalledWith('blocked', {
-        force: true,
-        reason: 'domain list changed',
-      });
-    });
-
-    it('does not call applyMode when mode is unblocked', async () => {
+    it('does not apply while unblocked — the files are enough', async () => {
       mockCalculateTargetMode.mockReturnValue('unblocked');
       await domainService.addDomain('reddit.com');
+      expect(mockGenerateSystemFiles).toHaveBeenCalledTimes(1);
       expect(mockApplyMode).not.toHaveBeenCalled();
     });
 
-    it('rolls back on generate-system-config failure', async () => {
-      mockExecFileAsync.mockRejectedValue(new Error('script failed'));
-      const originalRaw = JSON.stringify(sampleConfig);
-      mockFs.readFileSync.mockReturnValue(originalRaw);
+    it('throws 400 for an invalid domain', async () => {
+      await expect(domainService.addDomain('not valid!')).rejects.toThrow('Invalid domain format');
+      expect(mockWriteFileAtomic).not.toHaveBeenCalled();
+    });
+
+    it('throws 409 for a duplicate domain', async () => {
+      await expect(domainService.addDomain('facebook.com')).rejects.toMatchObject({ statusCode: 409 });
+      expect(mockWriteFileAtomic).not.toHaveBeenCalled();
+    });
+
+    it('rolls back domains.json when generation fails', async () => {
+      const originalRaw = setFileContent(sampleConfig);
+      mockGenerateSystemFiles.mockImplementation(() => {
+        throw new Error('disk full');
+      });
 
       await expect(domainService.addDomain('reddit.com')).rejects.toThrow('Failed to regenerate system config');
 
-      // Second writeFileSync call should be the rollback
-      expect(mockFs.writeFileSync).toHaveBeenCalledTimes(2);
-      const rollbackCall = mockFs.writeFileSync.mock.calls[1];
-      expect(rollbackCall[1]).toBe(originalRaw);
+      expect(mockWriteFileAtomic).toHaveBeenCalledTimes(2);
+      expect(mockWriteFileAtomic.mock.calls[1][1]).toBe(originalRaw);
+    });
+
+    it('forces a full resync on the next tick after a failed generation', async () => {
+      mockGenerateSystemFiles.mockImplementationOnce(() => {
+        throw new Error('disk full');
+      });
+      await expect(domainService.addDomain('reddit.com')).rejects.toThrow();
+
+      // Le fichier est revenu à son contenu d'origine : sans invalidation
+      // explicite, une comparaison d'empreinte pourrait conclure « rien à faire ».
+      await domainService.syncSystemFilesIfChanged();
+      expect(mockGenerateSystemFiles).toHaveBeenCalledTimes(2);
     });
   });
 
   describe('removeDomain', () => {
-    it('removes an existing domain', async () => {
+    it('removes an existing domain and regenerates', async () => {
       const result = await domainService.removeDomain('facebook.com');
-      expect(result.expandedDomains).toBeDefined();
-      expect(mockFs.writeFileSync).toHaveBeenCalled();
+
+      expect(result.expandedDomains).not.toContain('facebook.com');
+      const written = JSON.parse(mockWriteFileAtomic.mock.calls[0][1]) as DomainsConfig;
+      expect(written.entries.map((e) => e.domain)).toEqual(['youtube.com']);
+
+      expect(mockGenerateSystemFiles).toHaveBeenCalledTimes(1);
+      expect(mockApplyMode).toHaveBeenCalledWith('blocked', { force: true, reason: 'domain removed' });
     });
 
-    it('throws 400 for invalid domain', async () => {
+    it('throws 400 for an invalid domain', async () => {
       await expect(domainService.removeDomain('!!!!')).rejects.toThrow('Invalid domain format');
     });
 
-    it('throws 404 for non-existent domain', async () => {
-      try {
-        await domainService.removeDomain('nonexistent.com');
-        expect.unreachable('Should have thrown');
-      } catch (err) {
-        expect((err as any).statusCode).toBe(404);
-      }
-    });
-  });
-
-  describe('invalidateDomainCache', () => {
-    it('forces cache reload on next read', () => {
-      // First call caches
-      domainService.getExpandedDomains();
-      expect(mockFs.readFileSync).toHaveBeenCalledTimes(1);
-
-      // Second call uses cache
-      domainService.getExpandedDomains();
-      expect(mockFs.readFileSync).toHaveBeenCalledTimes(1);
-
-      // Invalidate + third call re-reads
-      domainService.invalidateDomainCache();
-      domainService.getExpandedDomains();
-      expect(mockFs.readFileSync).toHaveBeenCalledTimes(2);
+    it('throws 404 for an unknown domain', async () => {
+      await expect(domainService.removeDomain('nonexistent.com')).rejects.toMatchObject({ statusCode: 404 });
+      expect(mockWriteFileAtomic).not.toHaveBeenCalled();
     });
   });
 });

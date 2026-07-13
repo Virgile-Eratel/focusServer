@@ -74,4 +74,4 @@ Running `generate-system-config.ts` produces:
 | `hosts.blocked`         | `/etc/hosts` format, grouped by tag |
 | `pf.user.conf.template` | PF firewall rules, grouped by tag   |
 
-These are deployed to `/usr/local/etc/focus/` by `install.sh`.
+These are deployed to `/usr/local/etc/focusServer/` by `install.sh`.
