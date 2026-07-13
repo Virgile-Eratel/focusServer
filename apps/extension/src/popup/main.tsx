@@ -10,7 +10,7 @@ if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
 }
 
 const container = document.getElementById('root');
-if (!container) throw new Error('#root introuvable dans index.html');
+if (!container) throw new Error('#root not found in popup.html');
 
 createRoot(container).render(
   <StrictMode>

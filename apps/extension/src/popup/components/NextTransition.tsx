@@ -8,18 +8,20 @@ type Props = {
 
 export function NextTransition({ transition }: Props) {
   if (!transition) {
-    return <p className="text-muted-foreground text-xs">Aucun changement prévu.</p>;
+    return <p className="text-muted-foreground text-xs">No scheduled change.</p>;
   }
 
   const at = new Date(transition.at);
   const now = new Date();
-  const label = transition.mode === 'blocked' ? 'Prochain blocage' : 'Prochain déblocage';
+  // La transition ne concerne que la catégorie divertissement : adult et
+  // other ne changent jamais d'état.
+  const label = transition.mode === 'blocked' ? 'Entertainment blocked again' : 'Entertainment unblocked';
 
   return (
     <div className="space-y-0.5">
       <p className="text-muted-foreground text-xs">{label}</p>
       <p className="text-sm font-medium">
-        {formatDay(at, now)} à {formatTime(at)}
+        {formatDay(at, now)} at {formatTime(at)}
       </p>
       <p className="text-muted-foreground text-xs">{formatCountdown(at, now)}</p>
     </div>

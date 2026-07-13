@@ -20,6 +20,15 @@ find_node() {
 }
 
 NODE_BIN=$(find_node)
+
+# node:sqlite exige Node >= 24 ; un binaire plus vieux = crash-loop launchd silencieux
+NODE_MAJOR=$("$NODE_BIN" -v | sed 's/^v//' | cut -d. -f1)
+if [[ "$NODE_MAJOR" -lt 24 ]]; then
+  echo "❌ Node >= 24 requis (trouvé : $("$NODE_BIN" -v))."
+  echo "   Installez-le avec nvm : nvm install 24 && nvm alias default 24"
+  exit 1
+fi
+
 echo "🔧 Installation pour $REAL_USER (Node: $NODE_BIN)"
 
 # 0. Preflight — la blocklist du projet est la source de vérité (jamais copiée ailleurs)
@@ -42,7 +51,8 @@ sudo -u "$REAL_USER" pnpm build:server || sudo -u "$REAL_USER" npm run build:ser
 # lui-même dès que config/domains.json change.
 echo "📂 [2/6] Fichiers config..."
 mkdir -p /usr/local/etc/focusServer
-install -m 644 "$SERVER_DIR/config/hosts.unblocked" /usr/local/etc/focusServer/
+# Les 4 fichiers (hosts.blocked, hosts.unblocked, pf.*.template) sont générés
+# depuis domains.json — plus aucun fichier statique copié.
 "$NODE_BIN" "$SERVER_DIR/dist/scripts/generate-system-config.js" \
     --input "$DOMAINS_FILE" --out-dir /usr/local/etc/focusServer
 
@@ -95,6 +105,8 @@ cat <<EOF > "$PLIST"
         <key>HOME</key><string>${REAL_HOME}</string>
         <key>PORT</key><string>5959</string>
         <key>DOMAINS_PATH</key><string>${DOMAINS_FILE}</string>
+        <key>OLLAMA_URL</key><string>http://localhost:11434</string>
+        <key>OLLAMA_MODEL</key><string>gemma3:4b</string>
     </dict>
 </dict>
 </plist>
@@ -103,5 +115,14 @@ chown "$REAL_USER" "$PLIST"
 REAL_UID=$(id -u "$REAL_USER")
 launchctl bootout "gui/$REAL_UID/com.focus.server" 2>/dev/null || true
 launchctl bootstrap "gui/$REAL_UID" "$PLIST"
+
+# 7. Préflight Ollama (non bloquant — fail closed : sans Ollama, les domaines
+# inconnus sont simplement bloqués)
+if curl -s --max-time 2 http://localhost:11434/api/version >/dev/null 2>&1; then
+  echo "🤖 Ollama détecté."
+else
+  echo "⚠️  Ollama injoignable sur localhost:11434 : les domaines inconnus"
+  echo "   seront bloqués par défaut (fail closed) tant qu'il ne tourne pas."
+fi
 
 echo "✨ Installation terminée ! Logs: tail -f /tmp/focus-server.out.log"

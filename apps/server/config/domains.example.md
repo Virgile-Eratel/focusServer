@@ -1,16 +1,18 @@
 # domains.json — Reference
 
-Configuration file listing domains to block. Used by `generate-system-config.ts` to produce `/etc/hosts` entries and PF firewall rules.
+Configuration file listing domains to block. Used by the server (and `generate-system-config.ts` at install time) to produce `/etc/hosts` entries and PF firewall rules.
 
 ## Schema
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "defaults": { ... },
   "entries": [ ... ]
 }
 ```
+
+Version 1 files (`tags` instead of `category`/`source`) are migrated automatically at server startup: `adult` → `adult`, `social`/`video` → `entertainment`, everything else → `other`.
 
 ## Defaults
 
@@ -25,15 +27,26 @@ Applied to every entry unless overridden at entry level.
 
 ## Entry Fields
 
-| Field           | Type     | Required | Description                                                                                               |
-| --------------- | -------- | -------- | --------------------------------------------------------------------------------------------------------- |
-| `domain`        | string   | yes      | Primary domain to block (e.g. `instagram.com`)                                                            |
-| `tags`          | string[] | no       | Categories for grouping in generated config (e.g. `["social"]`)                                           |
-| `aliases`       | string[] | no       | Additional domains to block alongside primary (e.g. `["youtu.be"]`). `includeWww` applies to aliases too. |
-| `includeWww`    | boolean  | no       | Override default — add/skip `www.` variant for this entry                                                 |
-| `includeMobile` | boolean  | no       | Override default — add/skip `m.` variant for this entry                                                   |
-| `hosts`         | boolean  | no       | Override default — include/exclude from `/etc/hosts`                                                      |
-| `pf`            | boolean  | no       | Override default — include/exclude from PF firewall rules                                                 |
+| Field           | Type     | Required | Description                                                                                                |
+| --------------- | -------- | -------- | ---------------------------------------------------------------------------------------------------------- |
+| `domain`        | string   | yes      | Primary domain to block (e.g. `instagram.com`)                                                             |
+| `category`      | string   | yes      | Blocking policy: `adult` (always blocked), `entertainment` (blocked per schedule), `other` (never blocked) |
+| `source`        | string   | yes      | `manual` (human-added) or `ollama` (AI-classified)                                                         |
+| `aliases`       | string[] | no       | Additional domains to block alongside primary (e.g. `["youtu.be"]`). `includeWww` applies to aliases too.  |
+| `includeWww`    | boolean  | no       | Override default — add/skip `www.` variant for this entry                                                  |
+| `includeMobile` | boolean  | no       | Override default — add/skip `m.` variant for this entry                                                    |
+| `hosts`         | boolean  | no       | Override default — include/exclude from `/etc/hosts`                                                       |
+| `pf`            | boolean  | no       | Override default — include/exclude from PF firewall rules                                                  |
+
+## Categories
+
+A category exists only to carry a distinct blocking policy:
+
+| Category        | Policy                                                            |
+| --------------- | ----------------------------------------------------------------- |
+| `adult`         | Blocked **always** — no pause, no exception                       |
+| `entertainment` | Blocked according to `WEEKLY_SCHEDULE` (free during pauses)       |
+| `other`         | Never blocked (present only for AI-classified known-safe domains) |
 
 ## How Blocking Works
 
@@ -49,6 +62,8 @@ Given this entry with defaults `{ includeWww: true, includeMobile: false }`:
 ```json
 {
   "domain": "youtube.com",
+  "category": "entertainment",
+  "source": "manual",
   "aliases": ["youtu.be"],
   "includeMobile": true,
   "pf": false
@@ -67,11 +82,13 @@ Blocked hostnames generated:
 
 ## Generated Files
 
-Running `generate-system-config.ts` produces:
+The server (on every change of `domains.json`) and `generate-system-config.ts` (at install time) produce four files:
 
-| File                    | Content                             |
-| ----------------------- | ----------------------------------- |
-| `hosts.blocked`         | `/etc/hosts` format, grouped by tag |
-| `pf.user.conf.template` | PF firewall rules, grouped by tag   |
+| File                         | Content (by category)     | Installed to `/etc` when |
+| ---------------------------- | ------------------------- | ------------------------ |
+| `hosts.blocked`              | `adult` + `entertainment` | mode `blocked`           |
+| `hosts.unblocked`            | `adult` only              | mode `unblocked` (pause) |
+| `pf.user.conf.template`      | `adult` + `entertainment` | mode `blocked`           |
+| `pf.unblocked.conf.template` | `adult` only              | mode `unblocked` (pause) |
 
-These are deployed to `/usr/local/etc/focusServer/` by `install.sh`.
+These are written to `/usr/local/etc/focusServer/` and copied into `/etc` by `focus-apply.sh`. Adult domains therefore stay blocked even during pause windows.

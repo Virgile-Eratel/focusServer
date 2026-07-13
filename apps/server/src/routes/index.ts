@@ -1,4 +1,4 @@
-import express, { Router } from "express";
+import express, { Router } from 'express';
 import focusRouter from './focus.routes';
 
 const router: Router = express.Router();

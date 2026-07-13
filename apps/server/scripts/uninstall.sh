@@ -87,9 +87,15 @@ echo "   -> Script binaire supprimé"
 # Fichiers générés dans /usr/local/etc/focusServer.
 # La blocklist elle-même (apps/server/config/domains.json) reste intacte : elle
 # appartient au projet et n'est jamais copiée ici.
+# verdicts.db contient les décisions de classification : elles ne sont pas
+# recalculables à l'identique — sauvegardez le fichier avant si vous y tenez.
 rm -f /usr/local/etc/focusServer/hosts.blocked
 rm -f /usr/local/etc/focusServer/hosts.unblocked
 rm -f /usr/local/etc/focusServer/pf.user.conf.template
+rm -f /usr/local/etc/focusServer/pf.unblocked.conf.template
+rm -f /usr/local/etc/focusServer/verdicts.db
+rm -f /usr/local/etc/focusServer/verdicts.db-wal
+rm -f /usr/local/etc/focusServer/verdicts.db-shm
 rmdir /usr/local/etc/focusServer 2>/dev/null || true
 
 # Emplacements historiques : /usr/local/etc/focus (répertoire renommé), et avant

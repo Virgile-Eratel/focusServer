@@ -64,7 +64,12 @@ export async function tick() {
   await applyMode(target);
 }
 
-export function getStatusService(): FocusStatus {
+/**
+ * Le socle du statut. Les champs par catégorie (`categories`,
+ * `blockedDomains`) sont assemblés par le contrôleur : ils viennent de
+ * domain.service, qui importe déjà ce module — l'inverse créerait un cycle.
+ */
+export function getStatusService(): Omit<FocusStatus, 'categories' | 'blockedDomains'> {
   const next = getNextTransitionFromNow();
 
   return {

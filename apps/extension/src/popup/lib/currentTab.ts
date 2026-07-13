@@ -25,8 +25,30 @@ export function normalizeHostname(rawUrl: string): string | null {
   return hostname.length > 0 ? hostname : null;
 }
 
+/**
+ * Le site que l'onglet actif VISE — pas l'URL qu'il affiche.
+ *
+ * Les deux diffèrent précisément là où ça compte : quand un site est bloqué,
+ * l'onglet porte `chrome-extension://<id>/blocked.html?url=https://…`. Lire
+ * `tab.url` y renvoyait donc « aucun site à classer », et le popup devenait
+ * inutile à l'endroit exact où l'on en a besoin — corriger un site que l'IA a
+ * bloqué à tort. Nos propres pages transportent la cible dans `?url=` : on la
+ * reprend là.
+ */
+function targetOf(tabUrl: string): string | null {
+  if (!tabUrl.startsWith(chrome.runtime.getURL(''))) return normalizeHostname(tabUrl);
+
+  const target = new URL(tabUrl).searchParams.get('url');
+  return target ? normalizeHostname(target) : null;
+}
+
 /** Domaine de l'onglet actif, ou `null` s'il n'est pas blocable. */
 export async function getCurrentTabDomain(): Promise<string | null> {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  return tab?.url ? normalizeHostname(tab.url) : null;
+  if (!tab?.url) return null;
+  try {
+    return targetOf(tab.url);
+  } catch {
+    return null;
+  }
 }

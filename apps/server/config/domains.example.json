@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "defaults": {
     "includeWww": true,
     "includeMobile": false,
@@ -7,16 +7,15 @@
     "pf": true
   },
   "entries": [
-    { "domain": "instagram.com", "tags": ["social"] },
-    { "domain": "tiktok.com", "tags": ["social"], "pf": false },
+    { "domain": "instagram.com", "category": "entertainment", "source": "manual" },
+    { "domain": "tiktok.com", "category": "entertainment", "source": "manual", "pf": false },
     {
       "domain": "youtube.com",
-      "tags": ["video"],
+      "category": "entertainment",
+      "source": "manual",
       "includeMobile": true,
       "aliases": ["youtu.be"],
       "pf": false
     }
   ]
 }
-
-

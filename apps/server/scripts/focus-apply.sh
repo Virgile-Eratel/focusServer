@@ -16,6 +16,7 @@ TARGET="/etc/hosts"
 
 # PF
 PF_TEMPLATE="$FOCUS_DIR/pf.user.conf.template"
+PF_UNBLOCKED_TEMPLATE="$FOCUS_DIR/pf.unblocked.conf.template"
 PF_USER_CONF="/etc/pf.user.conf"
 PF_CONF="/etc/pf.conf"
 ANCHOR_NAME="user-block"
@@ -39,12 +40,18 @@ fi
 
 # ===== APPLY HOSTS =====
 # Note : Ceci écrase /etc/hosts. Assurez-vous que les fichiers sources contiennent localhost.
+# Le mode unblocked n'est PAS « aucun blocage » : hosts.unblocked (généré)
+# conserve les domaines adult. En cas de fichier manquant (ancien déploiement),
+# repli fail closed sur les fichiers blocked.
 if [[ "$MODE" = "blocked" ]]; then
   log "Applying BLOCKED hosts"
   cp "$BLOCKED" "$TARGET"
-else
-  log "Applying UNBLOCKED hosts"
+elif [[ -f "$UNBLOCKED" ]]; then
+  log "Applying UNBLOCKED hosts (adult still blocked)"
   cp "$UNBLOCKED" "$TARGET"
+else
+  log "WARN hosts.unblocked missing — keeping BLOCKED hosts (fail closed)"
+  cp "$BLOCKED" "$TARGET"
 fi
 
 # ===== APPLY PF RULES =====
@@ -52,10 +59,12 @@ fi
 if [[ "$MODE" = "blocked" ]]; then
   log "Applying PF rules from template"
   cp "$PF_TEMPLATE" "$PF_USER_CONF"
+elif [[ -f "$PF_UNBLOCKED_TEMPLATE" ]]; then
+  log "Applying UNBLOCKED PF rules (adult only)"
+  cp "$PF_UNBLOCKED_TEMPLATE" "$PF_USER_CONF"
 else
-  log "Clearing PF rules (mode unblocked)"
-  # On laisse le fichier mais on le vide (ou juste un commentaire)
-  echo "# empty pf.user.conf (unblocked mode)" > "$PF_USER_CONF"
+  log "WARN pf.unblocked.conf.template missing — keeping BLOCKED PF rules (fail closed)"
+  cp "$PF_TEMPLATE" "$PF_USER_CONF"
 fi
 
 # ===== RELOAD PF =====
