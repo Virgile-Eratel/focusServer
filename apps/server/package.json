@@ -1,6 +1,9 @@
 {
   "name": "@focus/server",
   "private": true,
+  "engines": {
+    "node": ">=24"
+  },
   "author": "Virgile Eratel",
   "scripts": {
     "build": "tsc --project ./",
@@ -15,7 +18,8 @@
     "dayjs": "^1.11.19",
     "dotenv": "^17.2.3",
     "express": "^5.2.1",
-    "pino": "^10.3.1"
+    "pino": "^10.3.1",
+    "tldts": "^7.4.8"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",

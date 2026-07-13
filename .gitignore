@@ -32,3 +32,5 @@ apps/extension/.crx
 
 # Personal blocklist
 apps/server/config/domains.json
+
+scratchpad/
