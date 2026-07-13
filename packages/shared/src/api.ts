@@ -1,4 +1,4 @@
-import { FocusMode } from './types/focusMode';
+import type { FocusStatus } from './types/focus';
 
 // GET /health
 export type HealthResponse = {
@@ -6,11 +6,9 @@ export type HealthResponse = {
 };
 
 // GET focus/status
-export type FocusStatusResponse = {
-  mode: FocusMode;
-  isScheduledPause: boolean;
-  time: string;
-};
+// Même forme que l'état interne du serveur — une seule définition, pas de copie.
+// La prochaine transition est typée `ScheduledTransition` (voir ./types/focus).
+export type FocusStatusResponse = FocusStatus;
 
 // GET focus/domains
 export type DomainsResponse = {

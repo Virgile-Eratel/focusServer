@@ -77,15 +77,22 @@ pnpm build:extension
 1. Open `chrome://extensions/`
 2. Enable **Developer mode** (top-right toggle)
 3. Click **Load unpacked**
-4. Select the `apps/extension/` folder
+4. Select the `apps/extension/` folder — the one holding `manifest.json`, **not** `apps/extension/dist/`
 
-The extension connects to the local server (`http://localhost:5959`) to display blocking status and manage domains.
+> The extension ID is derived from the path of the folder you load, and the server only accepts requests from the whitelisted ID (`ALLOWED_ORIGINS` in `apps/server/src/config/focus.ts`). Loading a different folder changes the ID, and every request is then rejected by CORS.
+
+The popup connects to the local server (`http://localhost:5959`) and shows:
+
+- the current status (blocked / unblocked, or server unreachable);
+- the next scheduled transition (“next unblock today at 18:00”), derived from `WEEKLY_SCHEDULE`;
+- one button to block the current tab's site (the hostname only: `test.com/page` is stored as `test.com`);
+- a read-only panel listing the blocklist.
 
 ## Update the blocklist
 
 Edit `apps/server/config/domains.json`. That's all — no script to run.
 
-The running server checks the file on every tick (60s by default). When it changes, it regenerates `hosts.blocked` and `pf.user.conf.template`, then reapplies the current mode. Adding or removing a domain from the Chrome extension goes through the same path, and takes effect immediately.
+The running server checks the file on every tick (60s by default). When it changes, it regenerates `hosts.blocked` and `pf.user.conf.template`, then reapplies the current mode. Adding a domain from the Chrome extension goes through the same path, and takes effect immediately. Removing a domain is done by editing the file — the popup does not delete.
 
 ## Uninstall
 

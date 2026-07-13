@@ -4,7 +4,7 @@
   "description": "FocusServer extension",
   "version": "0.0.1",
   "action": {
-    "default_popup": "index.html",
+    "default_popup": "dist/popup.html",
     "default_title": "FocusServer",
     "default_icon": "icons/icon128.png"
   },

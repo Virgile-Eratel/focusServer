@@ -11,7 +11,9 @@
     "build:extension": "pnpm --filter @focus/shared build && pnpm --filter @focus/extension build",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test:server": "pnpm --filter @focus/server test"
+    "test": "pnpm --filter @focus/shared build && pnpm -r run test",
+    "test:server": "pnpm --filter @focus/server test",
+    "test:extension": "pnpm --filter @focus/shared build && pnpm --filter @focus/extension test"
   },
   "pnpm": {
     "overrides": {

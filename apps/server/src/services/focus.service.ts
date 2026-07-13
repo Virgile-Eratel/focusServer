@@ -2,7 +2,7 @@ import { ApplicableFocusMode, FocusStatus, RuntimeFocusMode } from '@focus/share
 import { FocusModeEnum } from '@focus/shared/src/types/focusMode';
 import dayjs from '../utils/dayjs';
 import { apply } from './focusApplier.service';
-import { isScheduledPause } from './scheduleService';
+import { getNextTransitionFromNow, isScheduledPause } from './scheduleService';
 import { createChildLogger } from '../utils/logger';
 
 const log = createChildLogger('focus');
@@ -65,9 +65,12 @@ export async function tick() {
 }
 
 export function getStatusService(): FocusStatus {
+  const next = getNextTransitionFromNow();
+
   return {
     mode: currentMode,
     isScheduledPause: isScheduledPause(),
     time: dayjs().format('HH:mm:ss'),
+    nextTransition: next ? { mode: next.mode, at: next.at.toISOString() } : null,
   };
 }
